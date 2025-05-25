@@ -1,5 +1,6 @@
 import { ClerkProvider } from "@clerk/nextjs";
 import Header from "@/app/components/header";
+import Footer from "./components/footer"
 import "./globals.css";
 import Logo from "./components/logo";
 import { Geist, Geist_Mono } from "next/font/google";
@@ -16,7 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "Sunset Ventures FX",
+  title: "NOBLE TRADING APP",
   description:
     "Discover a thriving community dedicated to the art and science of business finance, focusing on managed investments and stock options analysis. Whether you’re a seasoned investor or just starting out, Sunset Ventures welcomes all like-minded individuals looking to enhance their financial knowledge and capabilities.",
 };
@@ -38,6 +39,7 @@ export default function RootLayout({ children }) {
         >
           <Header />
           {children}
+          <Footer/>
         </body>
       </html>
     </ClerkProvider>
