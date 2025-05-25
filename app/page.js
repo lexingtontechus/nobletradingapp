@@ -1,5 +1,5 @@
 import { currentUser, auth } from "@clerk/nextjs/server";
-import { PricingTable,UserButton  } from "@clerk/nextjs";
+import { PricingTable, UserButton } from "@clerk/nextjs";
 
 import Link from "next/link";
 export default async function Home() {
@@ -13,9 +13,7 @@ export default async function Home() {
   if (!user)
     return (
       <div className="p-8 mx-auto max-w-2xl">
-        <h1 className="text-3xl font-semibold">
-          🌅 Welcome to Noble Trading!
-        </h1>
+        <h1 className="text-3xl font-semibold">🌅 Welcome to Noble Trading!</h1>
         <div className="text-xl py-2">
           Discover a thriving community dedicated to the art and science of
           business finance, focusing on managed investments and stock options
@@ -61,21 +59,25 @@ export default async function Home() {
   return (
     <div className="p-8 mx-auto max-w-5xl">
       <h1 className="text-3xl font-semibold">🌅 Welcome to Noble Trading!</h1>
-      <div className="text-xl py-2"> Hello <span className="text-primary">{user?.firstName}</span></div>
+      <div className="text-xl py-2">
+        {" "}
+        Hello <span className="text-primary">{user?.firstName}</span>
+      </div>
       <div className="text-xl py-2">
         Manage your subscription. Choose/change a plan.
       </div>
-      <div className="p-8">
+      <div className="py-4">
         <PricingTable />
       </div>
       <div className="mx-auto text-center p-4">
-      Manage Your Profile & Billing Information, Go To The Account At The Top Right of the Page.  
+        Manage Your Profile & Billing Information, Go To "Manage Account" At The
+        Top Right of the Page.
       </div>
       <div className="text-lg py-2">
         Join our Discord Channel to receive all our Wealth Nation trade signal
         information & community benefits.
       </div>
-     
+
       <div className="mx-auto text-center p-4">
         <div className="btn btn-accent">
           <svg

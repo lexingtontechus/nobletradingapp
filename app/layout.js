@@ -1,10 +1,11 @@
 import { ClerkProvider } from "@clerk/nextjs";
 import Header from "@/app/components/header";
-import Footer from "./components/footer"
+import Footer from "./components/footer";
+import { Analytics } from "@vercel/analytics/next";
+import { dark } from "@clerk/themes";
 import "./globals.css";
 import Logo from "./components/logo";
 import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -31,6 +32,9 @@ export default function RootLayout({ children }) {
           logoImageUrl: <Logo size={12} padding={0} />,
           showOptionalFields: "false",
         },
+        baseTheme: dark,
+        mode: "modal",
+        popup: true,
       }}
     >
       <html lang="en">
@@ -39,7 +43,8 @@ export default function RootLayout({ children }) {
         >
           <Header />
           {children}
-          <Footer/>
+          <Footer />
+          <Analytics />
         </body>
       </html>
     </ClerkProvider>
