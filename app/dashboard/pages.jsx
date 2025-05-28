@@ -14,7 +14,7 @@ export default async function Dashboard() {
   if (!hasWealthNationPlan) return;
   <div className="p-8 mx-auto">
     Hello {user?.firstName}
-    <h1 className="text-3xl font-semibold">Welcome to Sunset Ventures FX</h1>
+    <h1 className="text-3xl font-semibold">Welcome to Noble Trading App</h1>
     <h2 className="text-xl font-semibold">Select A Subscription Plan</h2>
     <div style={{ maxWidth: "800px", margin: "0 auto", padding: "0 1rem" }}>
       <PricingTable />
@@ -24,7 +24,7 @@ export default async function Dashboard() {
   return;
   <div className="p-8 mx-auto">
     Hello {user?.firstName}
-    <h1 className="text-3xl font-semibold">Welcome to Sunset Ventures FX</h1>
+    <h1 className="text-3xl font-semibold">Welcome to Noble Trading App</h1>
     <h2 className="text-xl font-semibold">Manage Your Subscription Plan</h2>
     <div style={{ maxWidth: "800px", margin: "0 auto", padding: "0 1rem" }}>
       <PricingTable />

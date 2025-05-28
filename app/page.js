@@ -13,13 +13,15 @@ export default async function Home() {
   if (!user)
     return (
       <div className="p-8 mx-auto max-w-2xl">
-        <h1 className="text-3xl font-semibold">🌅 Welcome to Noble Trading!</h1>
+        <h1 className="text-3xl font-semibold">
+          🌅 Welcome to <span className="uppercase">Noble Trading!</span>
+        </h1>
         <div className="text-xl py-2">
           Discover a thriving community dedicated to the art and science of
           business finance, focusing on managed investments and stock options
           analysis. Whether you’re a seasoned investor or just starting out,
-          Sunset Ventures welcomes all like-minded individuals looking to
-          enhance their financial knowledge and capabilities.
+          Noble Trading welcomes all like-minded individuals looking to enhance
+          their financial knowledge and capabilities.
         </div>
         <div className="text-xl py-2">Key Benefits:</div>
         <ul className="text-sm">
@@ -48,17 +50,22 @@ export default async function Home() {
         </ul>
 
         <div className="text-xl py-2">
-          At Sunset Ventures, we foster an environment of learning, growth, and
-          mutual support in the realm of personal finance!
+          At <span className="uppercase">Noble Trading</span>, we foster an
+          environment of learning, growth, and mutual support in the realm of
+          personal finance!
         </div>
 
-        <div className="text-xl py-2">Sign In/Sign Up Today</div>
+        <div className="text-xl py-2">
+          Sign in today. Your membership awaits you.
+        </div>
       </div>
     );
 
   return (
     <div className="p-8 mx-auto max-w-5xl">
-      <h1 className="text-3xl font-semibold">🌅 Welcome to Noble Trading!</h1>
+      <h1 className="text-3xl font-semibold">
+        🌅 Welcome to <span className="uppercase">Noble Trading!</span>
+      </h1>
       <div className="text-xl py-2">
         {" "}
         Hello <span className="text-primary">{user?.firstName}</span>

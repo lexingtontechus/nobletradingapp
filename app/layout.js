@@ -20,7 +20,7 @@ const geistMono = Geist_Mono({
 export const metadata = {
   title: "NOBLE TRADING APP",
   description:
-    "Discover a thriving community dedicated to the art and science of business finance, focusing on managed investments and stock options analysis. Whether you’re a seasoned investor or just starting out, Sunset Ventures welcomes all like-minded individuals looking to enhance their financial knowledge and capabilities.",
+    "Discover a thriving community dedicated to the art and science of business finance, focusing on managed investments and stock options analysis. Whether you’re a seasoned investor or just starting out, Noble Trading App welcomes all like-minded individuals looking to enhance their financial knowledge and capabilities.",
 };
 
 export default function RootLayout({ children }) {

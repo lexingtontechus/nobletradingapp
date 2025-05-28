@@ -7,7 +7,7 @@ export default function NotFound() {
       <div className="hero-content text-center">
         <div className="max-w-md">
           <h1 className="m-4 text-5xl font-bold uppercase">
-            Sunset Ventures FX
+            Noble Trading App
           </h1>
 
           <button className="btn btn-error uppercase font-bold">

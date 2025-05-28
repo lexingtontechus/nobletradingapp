@@ -1,15 +1,17 @@
-import Link from "next/link"
+import Link from "next/link";
 export default function Footer() {
-return(
-
-<footer className="footer sm:footer-horizontal footer-center">
-<nav className="grid grid-flow-col gap-4">
-<Link href="/terms">Terms</Link>
-    <Link href="/privacy">Privacy</Link>
-   </nav>
-<aside>
-   
-    <p className="px-2">Copyright © {new Date().getFullYear()} - All right reserved</p>
-    </aside>
-</footer>
-)}
+  return (
+    <footer className="footer sm:footer-horizontal footer-center">
+      <nav className="grid grid-flow-col gap-4">
+        <Link href="/terms">Terms</Link>
+        <Link href="/privacy">Privacy</Link>
+      </nav>
+      <aside>
+        <p className="px-2">
+          Copyright © {new Date().getFullYear()}{" "}
+          <span className="uppercase">Noble Trading App</span>
+        </p>
+      </aside>
+    </footer>
+  );
+}
