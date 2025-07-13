@@ -1,8 +1,8 @@
 export default function Privacy() {
   return (
-    <div className="container p-8 mx-auto">
+    <div className="container p-8 mx-auto py-2">
       <div className="py-2">
-        <h1 className="font-semibold py-2">
+        <h1 className="text-xl font-semibold py-2">
           Last Updated © Jan 01,{new Date().getFullYear()} - All right reserved
         </h1>
         This website is operated by Noble Trading App, a property of Noble

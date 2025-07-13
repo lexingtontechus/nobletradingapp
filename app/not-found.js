@@ -3,16 +3,17 @@
 import Link from "next/link";
 export default function NotFound() {
   return (
-    <div className="hero min-h-screen bg-base-200">
+    <div className="hero h-[800px]">
       <div className="hero-content text-center">
-        <div className="max-w-md">
-          <h1 className="m-4 text-5xl font-bold uppercase">
+        <div className="max-w-4xl">
+          <h1 className="my-8 text-5xl font-bold uppercase">
             Noble Trading App
           </h1>
-
-          <button className="btn btn-error uppercase font-bold">
-            <Link href="/">RETURN HOME</Link>
-          </button>
+          <div className="my-24">
+            <button className="btn btn-error uppercase font-bold">
+              <Link href="/">RETURN HOME</Link>
+            </button>
+          </div>
         </div>
       </div>
     </div>

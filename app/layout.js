@@ -2,10 +2,19 @@ import { ClerkProvider } from "@clerk/nextjs";
 import Header from "@/app/components/header";
 import Footer from "./components/footer";
 import { Analytics } from "@vercel/analytics/next";
+
 import { dark } from "@clerk/themes";
 import "./globals.css";
 import Logo from "./components/logo";
 import { Geist, Geist_Mono } from "next/font/google";
+
+//Mantine Charts
+import "@mantine/core/styles.css";
+import {
+  ColorSchemeScript,
+  MantineProvider,
+  mantineHtmlProps,
+} from "@mantine/core";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -26,6 +35,7 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <ClerkProvider
+      waitlistUrl="/"
       appearance={{
         layout: {
           logoPlacement: "inside",
@@ -39,7 +49,7 @@ export default function RootLayout({ children }) {
     >
       <html lang="en">
         <body
-          className={`${geistSans.variable} ${geistMono.variable} antialiased capitalize`}
+          className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         >
           <Header />
           {children}

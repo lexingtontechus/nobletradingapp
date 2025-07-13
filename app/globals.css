@@ -37,3 +37,38 @@
   --depth: 0;
   --noise: 1;
 }
+
+/*Hide Clerk Elements */
+.cl-footerAction,
+.cl-footerAction__signIn {
+  display: none;
+  color: black;
+}
+/*Hide Clerk MyAccount Billing Elements */
+.cl-navbarButtonText__billing {
+  display: none;
+  color: black;
+}
+.cl-navbarButton__billing,
+.cl-button__billing {
+  display: none;
+  color: black;
+}
+/*Hide Clerk Add Additional Email*/
+.cl-internal-hd6eiz,.cl-internal-eukaea, 
+.cl-profileSectionPrimaryButton,
+.cl-profileSectionPrimaryButton__emailAddresses,
+.cl-button__emailAddresses {
+  display: none;
+  color: black;
+}
+
+.blurple {
+  color: #e0e3ff;
+  background-color: #5865f2;
+}
+
+.lightblurple {
+  color: #5865f2;
+  background-color: #e0e3ff;
+}
