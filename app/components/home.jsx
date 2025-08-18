@@ -43,7 +43,7 @@ export default function Home() {
       </div>
       <div className="text-xl py-2">Join The Waitlist.</div>
       <div className="mx-auto text-center p-2">
-        <div className="btn btn-secondary font-bold uppercase">
+        <div className="btn btn-scondary rounded-full font-bold uppercase">
           <Link href="https://enormous-goblin-54.accounts.dev/waitlist">
             Waitlist
           </Link>

@@ -5,7 +5,7 @@ export async function GET() {
   await auth.protect();
 
   return NextResponse.json({
-    message: "This is a protected route",
+    message: "You are not authorized to access this resource",
     timestamp: new Date().toISOString(),
   });
 }

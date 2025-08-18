@@ -1,11 +1,13 @@
 "use client";
-//import { useUser } from "@clerk/nextjs";
-import Link from "next/link";
+//import { currentUser, auth } from "@clerk/nextjs/server";
 import { useUser } from "@clerk/nextjs";
 import { useEffect, useState, useCallback } from "react";
+import { redirect } from "next/navigation";
 
-export default function DiscordNo() {
-  const DISCORDURL = process.env.NEXT_PUBLIC_DISCORD_URL;
+import DiscordNo from "../components/discordno";
+import DiscordYes from "../components/discordyes";
+
+export default function Discord() {
   const { isSignedIn, user } = useUser();
 
   //const useremail  = user.publicMetadata.emailAddress; //user.emailAddress; //es[0].emailAddress;
@@ -70,23 +72,10 @@ export default function DiscordNo() {
 
     return () => clearInterval(interval);
   }, [fetchDiscord, isAutoRefresh]);
-  return (
-    <div className="">
-      <div className="text-lg">Join our Discord community.</div>
-      <div className="text-xs uppercase font-semibold opacity-60">
-        You will need to be a member for 15mins. Go through the onboarding
-        process.
-      </div>
-      <div className="py-2 col-wrap text-xl">
-        Read the community guide and terms & conditions.
-      </div>
 
-      <div className="btn rounded-full max-w-[340px] blurple">
-        <img className="size-8" src="/logoDiscord.svg" />
-        <Link href={DISCORDURL} target="_blank">
-          JOIN DISCORD
-        </Link>
-      </div>
-    </div>
+  return (
+    <>
+      {user?.publicMetadata.discord == "false" ? <DiscordNo /> : <DiscordYes />}
+    </>
   );
 }
