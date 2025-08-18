@@ -1,105 +1,52 @@
-"use client";
-//import { currentUser, auth } from "@clerk/nextjs/server";
-import { useUser } from "@clerk/nextjs";
-import { useEffect, useState } from "react";
-import HomePage from "./components/home";
-import DiscordNo from "./components/discordno";
-import DiscordYes from "./components/discordyes";
-import PostRequestButton from "./components/postrequestbutton";
-import ActiveUser from "./components/activeuser";
-import SelectPlans from "./components/selectplans";
-
-//{user.primaryEmailAddress.emailAddress} {user.emailAddresses[0].emailAddress}
-
+import Link from "next/link";
 export default function Home() {
-  const DISCORDURL = process.env.NEXT_PUBLIC_DISCORD_URL;
-  //const user = await currentUser();
-  const { isSignedIn, user } = useUser();
-
-  //const useremail  = user.publicMetadata.emailAddress; //user.emailAddress; //es[0].emailAddress;
-
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [lastUpdated, setLastUpdated] = useState(null);
-
-  //reload user for Discord updates
-  const fetchData = async () => {
-    try {
-      setError(null);
-      const response = await user.reload(); //fetch("/api/user");
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch data");
-      }
-
-      const newData = await response.json();
-      setData(newData);
-      setLastUpdated(new Date());
-      setLoading(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    // Initial fetch
-    fetchData();
-
-    // Set up interval for refreshing every 3 seconds
-    const interval = setInterval(fetchData, 3000);
-
-    // Cleanup interval on component unmount
-    return () => clearInterval(interval);
-  }, []);
-
-  //Default Home page where user is not signedin
-  if (!isSignedIn) return <HomePage />;
-
   return (
     <div className="p-8 mx-auto max-w-4xl">
       <h1 className="text-3xl font-semibold">
-        🌅 Welcome to <span className="uppercase">Noble Trading!</span>{" "}
-        <span className="text-primary">{user?.firstName}</span>
+        🌅 Welcome to <span className="uppercase">Noble Trading!</span>
       </h1>
-
       <div className="text-xl py-2">
-        Manage Your Profile, Go To "Manage Account" At The Top Right of the
-        Page.
+        Discover a thriving community dedicated to the art and science of
+        business finance, focusing on managed investments and stock options
+        analysis. Whether you’re a seasoned investor or just starting out, Noble
+        Trading welcomes all like-minded individuals looking to enhance their
+        financial knowledge and capabilities.
       </div>
-
-      <ul className="list bg-base-100 rounded-box shadow-md">
-        {/*STEP1*/}
-        <li className="py-2 opacity-60 tracking-wide text-4xl font-thin tabular-nums">
-          The #1 Financial Information Network
+      <div className="text-xl py-2">Key Benefits:</div>
+      <ul className="text-sm">
+        <li>
+          📊 Expert Insights: Engage with finance professionals and experienced
+          investors who share their strategies and market analysis.
         </li>
-        {/*Discord yes | no*/}
-        {/*New user must join Discord for 15mins before plan selection becomes available*/}
-        {user?.publicMetadata.discord == "false" ? (
-          <DiscordNo />
-        ) : (
-          <DiscordYes />
-        )}
-
-        {/*STEP2*/}
-        <li className="py-2 opacity-60 tracking-wide text-4xl font-thin tabular-nums">
-          Memberships
+        <li>
+          💬 Collaborative Discussions: Participate in thought-provoking
+          conversations about current market trends and investment
+          opportunities.
         </li>
-
-        {/*planstatus | active | expired*/}
-        {/*Current user display plan details. New & Expired user display plan selection. */}
-        {user?.publicMetadata.discord == "true" &&
-        user?.publicMetadata.planstatus == "true" ? (
-          <ActiveUser user={user} />
-        ) : (
-          <SelectPlans
-            user={user}
-            useremail={user.primaryEmailAddress.emailAddress}
-          />
-        )}
+        <li>
+          📈 Resource Sharing: Access valuable tools, articles, and resources to
+          enhance your personal finance journey.
+        </li>
+        <li>
+          🤝 Networking Opportunities: Connect with fellow members to exchange
+          ideas, experiences, and investment tips.
+        </li>
+        <li>
+          🌟 Community Events: Join webinars and workshops that focus on managed
+          investments and stock options, led by experts in the field.
+        </li>
       </ul>
-      <PostRequestButton useremail={user.primaryEmailAddress.emailAddress} />
+      <div className="text-xl py-2">
+        At <span className="uppercase">Noble Trading</span>, we foster an
+        environment of learning, growth, and mutual support in the realm of
+        personal finance!
+      </div>
+      <div className="text-xl py-2">Join The Waitlist.</div>
+      <div className="mx-auto text-center p-2">
+        <div className="btn btn-secondary rounded-full font-bold uppercase">
+          <Link href="/waitlist">Waitlist</Link>
+        </div>
+      </div>
     </div>
   );
 }

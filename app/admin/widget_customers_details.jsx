@@ -1,9 +1,9 @@
-import { supabase } from "@/utils/supabase/server";
+import { createClient } from "@/utils/supabase/server";
 
 // Create a single supabase client for interacting with your database
 
 export default async function WidgetCustomersDetails() {
-  // const supabase = await createClient();
+  const supabase = await createClient();
 
   const monthNames = [
     "January",

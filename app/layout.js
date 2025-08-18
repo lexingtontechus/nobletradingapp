@@ -8,14 +8,6 @@ import "./globals.css";
 import Logo from "./components/logo";
 import { Geist, Geist_Mono } from "next/font/google";
 
-//Mantine Charts
-import "@mantine/core/styles.css";
-import {
-  ColorSchemeScript,
-  MantineProvider,
-  mantineHtmlProps,
-} from "@mantine/core";
-
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -35,7 +27,8 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <ClerkProvider
-      waitlistUrl="/"
+      waitlistUrl="/waitlist"
+      forceRedirectUrl="/portal"
       appearance={{
         layout: {
           logoPlacement: "inside",
