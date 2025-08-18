@@ -8,9 +8,7 @@ export async function GET(request) {
   const { userId, user } = await auth();
   const client = await clerkClient();
   try {
-    const discordToken =
-      process.env.DISCORD_TOKEN ||
-      "MTI1OTI2NTY1NjAzODIyODA3MA.GlQByr.yYs9-fYXFgzpuAyOojbp6sm1FhZgjKMiJ37ntc";
+    const discordToken = process.env.DISCORD_TOKEN;
 
     if (!discordToken) {
       console.log("[v0] Discord token not found in environment variables");
