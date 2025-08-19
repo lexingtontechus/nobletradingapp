@@ -37,7 +37,7 @@ const chartConfig = {
 };
 
 export default function BarChartCustomersPecisionPro({ data }) {
-  const [activeChart, setActiveChart] = React.useState("new");
+  const [activeChart, setActiveChart] = React.useState("active");
 
   const chartData = data.map((item) => ({
     date: new Date(item.date).toLocaleDateString("en-US", {

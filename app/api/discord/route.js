@@ -3,13 +3,14 @@
 import { NextResponse } from "next/server";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 
+
 export async function GET(request) {
   console.log("Noble Trading App Discord API route called");
   const { userId, user } = await auth();
   const client = await clerkClient();
   try {
     const discordToken = process.env.DISCORD_TOKEN;
-
+    const guildId = process.env.DISCORD_GUILID_ID;
     if (!discordToken) {
       console.log("[v0] Discord token not found in environment variables");
       return NextResponse.json(
@@ -20,9 +21,7 @@ export async function GET(request) {
 
     console.log("Noble Trading App Making request to Discord API");
     const response = await fetch(
-      "https://discord.com/api/v10/guilds/1259265148380512358/members/search?limit=1&query=dev0xdweb",
-      //      "https://discord.com/api/v10/guilds/1259265148380512358/members/search?limit=1&query={user.username}",
-
+      "https://discord.com/api/v10/guilds/{guildId}/members/search?limit=1&query={userId}",
       {
         method: "GET",
         headers: {

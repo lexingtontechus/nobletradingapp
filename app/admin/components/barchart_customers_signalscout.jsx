@@ -37,7 +37,7 @@ const chartConfig = {
 };
 
 export default function BarChartCustomersSignalScout({ data }) {
-  const [activeChart, setActiveChart] = React.useState("new");
+  const [activeChart, setActiveChart] = React.useState("active");
 
   const chartData = data.map((item) => ({
     date: new Date(item.date).toLocaleDateString("en-US", {
@@ -125,7 +125,8 @@ export default function BarChartCustomersSignalScout({ data }) {
                   <ChartTooltipContent
                     className="w-[150px] text-secondary bg-base-300"
                     nameKey="views"
-                    labelFormatter={(value) => {
+                    labelFormatter={(value) =>
+                       {
                       return new Date(value).toLocaleDateString("en-US", {
                         month: "short",
                         // day: "numeric",
