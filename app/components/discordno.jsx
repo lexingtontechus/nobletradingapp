@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useUser } from "@clerk/nextjs";
 import { useEffect, useState, useCallback } from "react";
+import DiscordInvite from "./discordinvite";
 
 export default function DiscordNo() {
   const DISCORDURL = process.env.NEXT_PUBLIC_DISCORD_URL;
@@ -65,8 +66,9 @@ export default function DiscordNo() {
     // Initial fetch
     fetchDiscord();
 
-    // Set up interval for auto-refresh
-    const interval = setInterval(fetchDiscord, 10000);
+    // Set up interval for auto-refresh every 60secs
+    // Disable auto-refresh on OK response 200
+    const interval = setInterval(fetchDiscord, 60000);
 
     return () => clearInterval(interval);
   }, [fetchDiscord, isAutoRefresh]);
@@ -74,19 +76,13 @@ export default function DiscordNo() {
     <div className="">
       <div className="text-lg">Join our Discord community.</div>
       <div className="text-xs uppercase font-semibold opacity-60">
-        You will need to be a member for 15mins. Go through the onboarding
-        process.
+        You will need to be a member before you can subscribe to our membership
+        plans. Go through the onboarding process.
       </div>
       <div className="py-2 col-wrap text-xl">
         Read the community guide and terms & conditions.
       </div>
-
-      <div className="btn rounded-full max-w-[340px] blurple">
-        <img className="size-8" src="/logoDiscord.svg" />
-        <Link href={DISCORDURL} target="_blank">
-          JOIN DISCORD
-        </Link>
-      </div>
+      <DiscordInvite />
     </div>
   );
 }

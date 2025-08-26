@@ -1,7 +1,7 @@
 import { HelioCheckout } from "@heliofi/checkout-react";
 
 const helioConfig = {
-  paylinkId: "6887fd0323a031902fad1edf",
+  paylinkId: process.env.NEXT_PUBLIC_NTA_SIGNALSCOUT, //||  "6887fd0323a031902fad1edf",
   display: "button",
   network: process.env.HELIO_NETWORK || "test", //not required for production
   primaryColor: "#5865f2", //"#fede1c",

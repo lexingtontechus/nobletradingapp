@@ -50,8 +50,8 @@ export default function Portal() {
     // Initial fetch
     fetchData();
 
-    // Set up interval for refreshing every 5/5000 seconds
-    const interval = setInterval(fetchData, 5000);
+    // Set up interval for refreshing every 30/30000 seconds
+    const interval = setInterval(fetchData, 30000);
 
     // Cleanup interval on component unmount
     return () => clearInterval(interval);
@@ -72,7 +72,7 @@ export default function Portal() {
 
       <div className="list bg-base-100 rounded-box shadow-md">
         {/*STEP1*/}
-        <div className="py-2 opacity-60 tracking-wide text-4xl font-thin tabular-nums">
+        <div className="py-2 opacity-60 text-accent tracking-wide text-4xl font-thin tabular-nums">
           The #1 Financial Information Network
         </div>
         {/*Discord yes | no*/}
@@ -83,7 +83,7 @@ export default function Portal() {
           <DiscordYes />
         )}
         {/*STEP2*/}
-        <div className="pt-4 opacity-60 tracking-wide text-4xl font-thin tabular-nums">
+        <div className="pt-4 opacity-60 text-accent tracking-wide text-4xl font-thin tabular-nums">
           Memberships
         </div>
 
