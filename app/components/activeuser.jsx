@@ -1,10 +1,8 @@
 import Logo from "./logo";
 
 export default function ActiveUser({ user }) {
-  const NTA_SIGNALSCOUT =
-    process.env.NEXT_PUBLIC_NTA_SIGNALSCOUT || "6887fd0323a031902fad1edf"; //Testnet
-  const NTA_PRECISIONPRO =
-    process.env.NEXT_PUBLIC_NTA_PRECISIONPRO || "6888416852cb57fabb54485d"; //Testnet
+  const NTA_SIGNALSCOUT = process.env.NEXT_PUBLIC_NTA_SIGNALSCOUT;
+  const NTA_PRECISIONPRO = process.env.NEXT_PUBLIC_NTA_PRECISIONPRO;
   return (
     <div className="">
       <div className="text-lg">{user.publicMetadata.planname}</div>
@@ -16,7 +14,7 @@ export default function ActiveUser({ user }) {
       {user.publicMetadata.planid == NTA_PRECISIONPRO && (
         <div className="text-xs uppercase font-semibold opacity-60">
           Plan Name : Precision Pro <br />
-          Status : ACTIVE
+          Status : <span className="text-emerald-700">ACTIVE</span>
         </div>
       )}
       <div className="list-col-wrap text-xl py-2">

@@ -2,10 +2,21 @@ import { useState } from "react";
 import Logo from "./logo";
 import CheckoutSignalScout from "./checkoutsignalscout";
 import CheckoutPrecisionPro from "./checkoutprecisionpro";
+import { createClient } from "@/utils/supabase/client";
+import { MarkdownRenderer } from "./markdownrender";
+
+const supabase = await createClient();
+
+const { data, error } = await supabase
+  .from("plans")
+  .select("*")
+  .eq("status", true)
+  .eq("plantype", "subscription");
 
 export default function Plans({ useremail, user }) {
   //const [discord, setDiscord] =;
   //const [planstatus, setPlanStatus] = useState("");
+  const NTA_PRECISIONPRO = process.env.NEXT_PUBLIC_NTA_PRECISIONPRO;
 
   return (
     <>
@@ -22,7 +33,7 @@ export default function Plans({ useremail, user }) {
           <div className="text-xl py-2">
             Our Membership Subscriptions are powered by
             <span className="text-accent"> Hel.io Payments</span> - a recurring
-            subscription platform that will invoice you at monthly intervals.
+            billing platform that will invoice you at monthly intervals.
           </div>
 
           <div
@@ -34,257 +45,44 @@ export default function Plans({ useremail, user }) {
         </div>
       ) : (
         <>
-          <div className="py-2 text-xl">Choose a monthly membership plan</div>
+          <div className="py-4 text-xl">Choose a monthly membership plan</div>
 
-          <div className="flex flex-wrap flex-grow content-center justify-center mx-auto">
-            <div className="card w-96 bg-base-100 shadow-sm">
-              <div className="card-body">
-                <span className="py-3"></span>
-                <div className="flex justify-between">
-                  <h2 className="uppercase text-3xl font-bold">Signal Scout</h2>
-                  <span className="text-xl font-bold text-emerald-500">
-                    $79/mo
-                  </span>
-                </div>
-                <ul className="mt-6 flex flex-col gap-2 text-xs">
-                  <li>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="size-4 me-2 inline-block text-success"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                    <span>Entry-level traders</span>
-                  </li>
-                  <li>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="size-4 me-2 inline-block text-success"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                    <span>Customizable style templates</span>
-                  </li>
-                  <li>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="size-4 me-2 inline-block text-success"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                    <span>Batch processing capabilities</span>
-                  </li>
-                  <li>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="size-4 me-2 inline-block text-success"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                    <span>AI-driven image enhancements</span>
-                  </li>
-                  <li className="opacity-50">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="size-4 me-2 inline-block text-base-content/50"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                    <span className="line-through">
-                      Seamless cloud integration
+          <div className="flex flex-wrap gap-4">
+            {data.map((item) => (
+              <div
+                key={item.id}
+                className="card card-bordered bg-base-300 w-96"
+              >
+                <div className="card-body">
+                  {item.plan_id == NTA_PRECISIONPRO ? (
+                    <span className="badge badge-sm badge-secondary">
+                      Most Popular
                     </span>
-                  </li>
-                  <li className="opacity-50">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="size-4 me-2 inline-block text-base-content/50"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                    <span className="line-through">
-                      Real-time collaboration tools
+                  ) : (
+                    <span className="py-3"></span>
+                  )}
+                  <div className="flex justify-between">
+                    <h2 className="uppercase text-3xl font-bold">
+                      {item.title}
+                    </h2>
+                    <span className="text-xl text-emerald-500">
+                      ${item.amount}/mth
                     </span>
-                  </li>
-                </ul>
-                <div className="card-actions text-center">
-                  <CheckoutSignalScout />
+                  </div>
+                  <MarkdownRenderer
+                    content={item.description}
+                    className="text-md text-muted-foreground space-y-2"
+                  />
+                  <div className="card-actions justify-end">
+                    {item.plan_id == NTA_PRECISIONPRO ? (
+                      <CheckoutPrecisionPro />
+                    ) : (
+                      <CheckoutSignalScout />
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-            <div className="card w-96 bg-base-100 shadow-sm">
-              <div className="card-body">
-                <span className="badge badge-sm badge-secondary">
-                  Most Popular
-                </span>
-                <div className="flex justify-between">
-                  <h2 className="uppercase text-3xl font-bold">
-                    Precision Pro
-                  </h2>
-                  <span className="text-xl font-bold text-emerald-500">
-                    $199/mo
-                  </span>
-                </div>
-                <ul className="mt-6 flex flex-col gap-2 text-xs">
-                  <li>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="size-4 me-2 inline-block text-success"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                    <span>Experienced traders</span>
-                  </li>
-                  <li>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="size-4 me-2 inline-block text-success"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                    <span>Customizable style templates</span>
-                  </li>
-                  <li>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="size-4 me-2 inline-block text-success"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                    <span>Batch processing capabilities</span>
-                  </li>
-                  <li>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="size-4 me-2 inline-block text-success"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                    <span>AI-driven image enhancements</span>
-                  </li>
-                  <li className="opacity-50">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="size-4 me-2 inline-block text-base-content/50"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                    <span className="line-through">
-                      Seamless cloud integration
-                    </span>
-                  </li>
-                  <li className="opacity-50">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="size-4 me-2 inline-block text-base-content/50"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                    <span className="line-through">
-                      Real-time collaboration tools
-                    </span>
-                  </li>
-                </ul>
-                <div className="card-actions justify-end">
-                  <CheckoutPrecisionPro />
-                </div>
-              </div>
-            </div>
+            ))}
           </div>
         </>
       )}

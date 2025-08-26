@@ -60,14 +60,14 @@ export default async function WidgetCustomersSignalScout() {
           <div className="stat-desc"># Expired Memberships</div>
         </div>
 
-        <div className="stat place-items-center">
+        {/*<div className="stat place-items-center">
           <div className="stat-figure text-secondary"></div>
           <div className="stat-title font-bold text-secondary">Renewed</div>
           <div className="stat-value text-emerald-700">
             {currentCustomersRenewed}
           </div>
           <div className="stat-desc"># Renewed Memberships</div>
-        </div>
+        </div>*/}
       </div>
     </div>
   );
