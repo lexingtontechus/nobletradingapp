@@ -53,7 +53,7 @@ export default function BarChartCustomersPecisionPro({ data }) {
 
   const total = React.useMemo(
     () => ({
-      ctive: data.reduce((sum, item) => sum + item.active, 0), //data.reduce((acc, curr) => acc + curr.new, 0),
+      active: data.reduce((sum, item) => sum + item.active, 0), //data.reduce((acc, curr) => acc + curr.new, 0),
       expired: data.reduce((sum, item) => sum + item.expired, 0), //data.reduce((acc, curr) => acc + curr.expired, 0)
       //renewed: data.reduce((sum, item) => sum + item.renewed, 0), //data.reduce((acc, curr) => acc + curr.renewed, 0)
     }),
