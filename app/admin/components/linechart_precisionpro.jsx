@@ -13,55 +13,58 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 
+// Precision Pro — year-to-date monthly revenue area chart.
+//
+// DATA SHAPE (from v_revenue_summary filtered to Precision Pro):
+//   { month, revenue_cents, renewals, new_subscriptions, payment_count }
+
 const chartConfig = {
-  new: {
+  new_subscriptions: {
     label: "New",
-    color: "oklch(62% .214 259.815)", //hsl(var(--chart-1))",
+    color: "oklch(62% .214 259.815)",
   },
-  expired: {
-    label: "Expired",
-    color: "oklch(.646 .222 41.116)", //"hsl(var(--chart-2))",
-  },
-  renewed: {
-    label: "Renewed",
-    color: "oklch(.6 .118 184.704)", //"hsl(var(--chart-3))",
+  renewals: {
+    label: "Renewals",
+    color: "oklch(.6 .118 184.704)",
   },
 };
 
 export function LineChartPrecisionPro({ data }) {
-  // Format data for the chart
-  const chartData = data.map((item) => ({
-    date: new Date(item.date).toLocaleDateString("en-US", {
-      month: "short",
-      //day: "numeric",
-    }),
-    active: item.active / 109000,
-    expired: item.expired / 100000,
-    renewed: item.renewed / 100000,
-  }));
+  const chartData = (data ?? []).map((item) => {
+    const total = (item.new_subscriptions ?? 0) + (item.renewals ?? 0);
+    const revenue = (item.revenue_cents ?? 0) / 100;
+    return {
+      date: String(item.month ?? "").slice(0, 7),
+      new_subscriptions: total
+        ? Math.round(revenue * (item.new_subscriptions / total))
+        : 0,
+      renewals: total
+        ? Math.round(revenue * (item.renewals / total))
+        : 0,
+    };
+  });
 
-  // Calculate totals for the summary
-  const totalActive = data.reduce((sum, item) => sum + item.active / 100000, 0);
-  const totalExpired = data.reduce(
-    (sum, item) => sum + item.expired / 100000,
+  const totalRevenue = (data ?? []).reduce(
+    (sum, item) => sum + (item.revenue_cents ?? 0) / 100,
     0
   );
-  const avgBounceRate =
-    data.length > 0
-      ? (
-          data.reduce((sum, item) => sum + item.renewed, 0) / data.length
-        ).toFixed(1)
-      : 0;
+  const totalNew = (data ?? []).reduce(
+    (sum, item) => sum + (item.new_subscriptions ?? 0),
+    0
+  );
+  const totalRenewals = (data ?? []).reduce(
+    (sum, item) => sum + (item.renewals ?? 0),
+    0
+  );
 
   return (
     <div className="container">
-      {/* Summary Cards */}
-      {/* Area Chart */}
       <Card>
         <CardHeader>
-          <CardTitle>Year-To-Date Revenue</CardTitle>
+          <CardTitle>Precision Pro — Year-To-Date Revenue</CardTitle>
           <CardDescription>
-            Aggregated monthly revenue by status
+            {totalNew} new · {totalRenewals} renewals · total{" "}
+            ${totalRevenue.toLocaleString("en-US", { maximumFractionDigits: 0 })}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -72,12 +75,7 @@ export function LineChartPrecisionPro({ data }) {
             <AreaChart
               accessibilityLayer
               data={chartData}
-              margin={{
-                left: 12,
-                right: 12,
-                top: 12,
-                bottom: 12,
-              }}
+              margin={{ left: 12, right: 12, top: 12, bottom: 12 }}
             >
               <CartesianGrid vertical={false} />
               <XAxis
@@ -96,6 +94,7 @@ export function LineChartPrecisionPro({ data }) {
                     style: "currency",
                     currency: "USD",
                     currencyDisplay: "symbol",
+                    maximumFractionDigits: 0,
                   })
                 }
               />
@@ -105,13 +104,11 @@ export function LineChartPrecisionPro({ data }) {
                 content={
                   <ChartTooltipContent
                     indicator="dot"
-                    formatter={(value, name, item, index) => (
+                    formatter={(value, name) => (
                       <>
                         <div
                           className="h-2.5 w-2.5 shrink-0 rounded-[2px] bg-(--color-bg)"
-                          style={{
-                            "--color-bg": `var(--color-${name})`,
-                          }}
+                          style={{ "--color-bg": `var(--color-${name})` }}
                         />
                         <div className="text-foreground ml-auto flex items-baseline gap-0.5 font-mono font-medium tabular-nums">
                           ${value}
@@ -123,27 +120,19 @@ export function LineChartPrecisionPro({ data }) {
                 }
               />
               <Area
-                dataKey="expired"
+                dataKey="new_subscriptions"
                 type="natural"
-                fill="var(--color-expired)"
+                fill="var(--color-new_subscriptions)"
                 fillOpacity={0.4}
-                stroke="var(--color-expired)"
+                stroke="var(--color-new_subscriptions)"
                 stackId="a"
               />
               <Area
-                dataKey="new"
+                dataKey="renewals"
                 type="natural"
-                fill="var(--color-new)"
+                fill="var(--color-renewals)"
                 fillOpacity={0.4}
-                stroke="var(--color-new)"
-                stackId="a"
-              />
-              <Area
-                dataKey="renewed"
-                type="natural"
-                fill="var(--color-renewed)"
-                fillOpacity={0.4}
-                stroke="var(--color-renewed)"
+                stroke="var(--color-renewals)"
                 stackId="a"
               />
             </AreaChart>

@@ -18,46 +18,42 @@ import {
 
 export const description = "Signal Scout Customers";
 
+// DATA SHAPE (from widget_customers_chart.jsx):
+//   { date: "YYYY-MM-01", active: <new_subscribers_this_month>, expired: 0 }
+//
+// "active" = count of NEW subscribers (initial successful payments) in that
+// month. The "expired" key is reserved for chart compatibility but not used
+// in the new schema (lifetime expiry is shown in the summary stat cards).
+
 const chartConfig = {
   views: {
-    label: "# of Customers",
+    label: "New Subscribers",
   },
   active: {
-    label: "Active",
-    color: "oklch(62% .214 259.815)", //"var(--chart-2)",
+    label: "New",
+    color: "oklch(62% .214 259.815)",
   },
   expired: {
     label: "Expired",
-    color: "oklch(.646 .222 41.116)", //"var(--chart-1)",
-  },
-  renewed: {
-    label: "Renewed",
-    color: "oklch(.6 .118 184.704)", //"var(--chart-1)",
+    color: "oklch(.646 .222 41.116)",
   },
 };
 
 export default function BarChartCustomersSignalScout({ data }) {
   const [activeChart, setActiveChart] = React.useState("active");
 
-  const chartData = data.map((item) => ({
-    date: new Date(item.date).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-    }),
-    active: item.active,
-    expired: item.expired,
-    //renewed: item.renewed,
+  const chartData = (data ?? []).map((item) => ({
+    date: item.date,
+    active: item.active ?? 0,
+    expired: item.expired ?? 0,
   }));
-
-  //  const totalPageViews = data.reduce((sum, item) => sum + item.page_views, 0)
 
   const total = React.useMemo(
     () => ({
-      active: data.reduce((sum, item) => sum + item.active, 0), //data.reduce((acc, curr) => acc + curr.new, 0),
-      expired: data.reduce((sum, item) => sum + item.expired, 0), //data.reduce((acc, curr) => acc + curr.expired, 0)
-      //renewed: data.reduce((sum, item) => sum + item.renewed, 0), //data.reduce((acc, curr) => acc + curr.renewed, 0)
+      active: (data ?? []).reduce((sum, item) => sum + (item.active ?? 0), 0),
+      expired: (data ?? []).reduce((sum, item) => sum + (item.expired ?? 0), 0),
     }),
-    []
+    [data]
   );
 
   return (
@@ -65,14 +61,13 @@ export default function BarChartCustomersSignalScout({ data }) {
       <Card className="py-4">
         <CardHeader className="flex flex-col items-stretch border-b !p-0 sm:flex-row">
           <div className="flex flex-1 flex-col justify-center gap-1 px-6 pt-4 pb-3 sm:!py-0">
-            <CardTitle>Signal Scout Month on Month Memberships</CardTitle>
+            <CardTitle>Signal Scout — New Subscribers per Month</CardTitle>
             <CardDescription>
-              Showing total members for year to date
+              Showing year-to-date {new Date().getFullYear()}
             </CardDescription>
           </div>
           <div className="flex">
-            {/*{["active", "expired", "renewed"].map((key) => {*/}
-            {["active", "expired"].map((key) => {
+            {["active"].map((key) => {
               const chart = key;
               return (
                 <button
@@ -85,7 +80,7 @@ export default function BarChartCustomersSignalScout({ data }) {
                     {chartConfig[chart].label}
                   </span>
                   <span className="text-lg leading-none font-bold sm:text-3xl">
-                    {/* {total[key].toLocaleString()}*/}
+                    {total[key].toLocaleString()}
                   </span>
                 </button>
               );
@@ -99,11 +94,8 @@ export default function BarChartCustomersSignalScout({ data }) {
           >
             <BarChart
               accessibilityLayer
-              data={data}
-              margin={{
-                left: 12,
-                right: 12,
-              }}
+              data={chartData}
+              margin={{ left: 12, right: 12 }}
             >
               <CartesianGrid vertical={false} />
               <XAxis
@@ -113,11 +105,8 @@ export default function BarChartCustomersSignalScout({ data }) {
                 tickMargin={8}
                 minTickGap={32}
                 tickFormatter={(value) => {
-                  const date = new Date(value);
-                  return date.toLocaleDateString("en-US", {
-                    month: "short",
-                    //day: "numeric",
-                  });
+                  const d = new Date(value);
+                  return d.toLocaleDateString("en-US", { month: "short" });
                 }}
               />
               <ChartTooltip
@@ -126,13 +115,11 @@ export default function BarChartCustomersSignalScout({ data }) {
                     className="w-[150px] text-secondary bg-base-300"
                     nameKey="views"
                     labelFormatter={(value) =>
-                       {
-                      return new Date(value).toLocaleDateString("en-US", {
+                      new Date(value).toLocaleDateString("en-US", {
                         month: "short",
-                        // day: "numeric",
-                        // year: "numeric",
-                      });
-                    }}
+                        year: "numeric",
+                      })
+                    }
                   />
                 }
               />

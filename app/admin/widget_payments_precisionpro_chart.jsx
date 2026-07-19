@@ -1,21 +1,25 @@
-import { createClient } from "@/utils/supabase/server";
-//import { AnalyticsChart } from "./components/analytics-chart";
+import { supabase } from "@/utils/supabase/_server";
 import { LineChartPrecisionPro } from "./components/linechart_precisionpro";
 
+// Precision Pro — year-to-date monthly revenue area chart.
+// Replaces the old `widget_payments_chart_details` table filtered by title.
+// Now reads from the `v_revenue_summary` view filtered to plan_title.
 export default async function WidgetPaymentsPrecisonProChart() {
-  const supabase = await createClient();
+  const currentYear = new Date().getFullYear();
+  const yearStart = `${currentYear}-01-01`;
+  const yearEnd = `${currentYear + 1}-01-01`;
 
-  // Fetch analytics data from Supabase
-  const { data: PaymentsPrecisionPro, error } = await supabase
-    .from("widget_payments_chart_details")
-    .select("date,active,expired,renewed")
-    .eq("title", "Precision Pro")
-    .order("date", { ascending: true })
-    .limit(30);
+  const { data, error } = await supabase
+    .from("v_revenue_summary")
+    .select("month, plan_title, payment_count, revenue_cents, renewals, new_subscriptions")
+    .eq("plan_title", "Precision Pro")
+    .gte("month", yearStart)
+    .lt("month", yearEnd)
+    .order("month", { ascending: true });
 
   if (error) {
-    console.error("Error fetching analytics:", error);
-    return <div>Error loading analytics data</div>;
+    console.error("Error fetching Precision Pro revenue:", error);
+    return <div className="text-error p-4">Error loading Precision Pro revenue</div>;
   }
 
   return (
@@ -25,8 +29,7 @@ export default async function WidgetPaymentsPrecisonProChart() {
           Precision Pro Payments
         </h1>
       </div>
-
-      <LineChartPrecisionPro data={PaymentsPrecisionPro || []} />
+      <LineChartPrecisionPro data={data ?? []} />
     </div>
   );
 }

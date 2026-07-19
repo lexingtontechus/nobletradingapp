@@ -1,18 +1,25 @@
-import { createClient } from "@/utils/supabase/server";
+import { supabase } from "@/utils/supabase/_server";
 
+// Summary stat cards: total registered users + total Discord-linked users.
+// Replaces the old `widget_customers_summary` table (which no longer exists).
+// Now reads directly from the `users` table via the service-role client
+// (admin needs to see ALL users, not just their own — RLS on the user-JWT
+// client would limit to the admin's own row).
 export default async function Customers() {
-  const supabase = await createClient();
+  // COUNT(*) is one round-trip; COUNT with a filter is another. Supabase's
+  // head:true + count:'exact' lets us fetch just the count, not the rows.
+  const [{ count: totalUsers, error: usersError }, { count: discordUsers, error: discordError }] =
+    await Promise.all([
+      supabase.from("users").select("*", { count: "exact", head: true }),
+      supabase
+        .from("users")
+        .select("*", { count: "exact", head: true })
+        .not("discord_id", "is", null),
+    ]);
 
-  // Fetch analytics data from Supabase
-  const { data, error } = await supabase
-    .from("widget_customers_summary")
-    .select("customersclerk,customersdiscord");
-  //.order("date", { ascending: true })
-  //.limit(30)
-
-  if (error) {
-    console.error("Error fetching customers:", error);
-    return <div>Error loading customers data</div>;
+  if (usersError || discordError) {
+    console.error("Error fetching customer summary:", usersError || discordError);
+    return <div className="text-error p-4">Error loading customer summary</div>;
   }
 
   return (
@@ -38,7 +45,7 @@ export default async function Customers() {
             Registered Users
           </div>
           <div className="stat-value text-emerald-700">
-            {data[0].customersclerk}
+            {(totalUsers ?? 0).toLocaleString()}
           </div>
           <div className="stat-desc">All Customers</div>
         </div>
@@ -56,8 +63,8 @@ export default async function Customers() {
           <div className="stat-title font-bold text-secondary">
             Discord Users
           </div>
-          <div className="stat-value">{data[0].customersdiscord}</div>
-          <div className="stat-desc"></div>
+          <div className="stat-value">{(discordUsers ?? 0).toLocaleString()}</div>
+          <div className="stat-desc">Linked Discord identity</div>
         </div>
       </div>
     </div>

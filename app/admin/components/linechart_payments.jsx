@@ -13,72 +13,88 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 
+// Year-to-date monthly revenue area chart (all plans combined).
+//
+// DATA SHAPE (from v_revenue_summary view, aggregated across plans per month):
+//   { month: "2026-01-01T00:00:00+00:00", revenue_cents, renewals, new_subscriptions, payment_count }
+//
+// The chart shows two stacked series:
+//   - new_subscriptions revenue (initial payments)
+//   - renewals revenue
+// Together they sum to total monthly revenue.
+//
+// Note: v_revenue_summary returns one row per (month, plan_title). The widget
+// aggregates across plans before passing here — so each item in `data` has the
+// summed revenue + counts for that month.
+
 const chartConfig = {
-  new: {
-    label: "Active",
-    color: "oklch(62% .214 259.815)", //hsl(var(--chart-1))",
+  new_subscriptions: {
+    label: "New",
+    color: "oklch(62% .214 259.815)",
   },
-  expired: {
-    label: "Expired",
-    color: "oklch(.646 .222 41.116)", //"hsl(var(--chart-2))",
-  },
-  renewed: {
-    label: "Renewed",
-    color: "oklch(.6 .118 184.704)", //"hsl(var(--chart-3))",
+  renewals: {
+    label: "Renewals",
+    color: "oklch(.6 .118 184.704)",
   },
 };
 
+function aggregateByMonth(rows) {
+  // Rows from v_revenue_summary are per (month, plan_title). Group by month.
+  const byMonth = new Map();
+  for (const r of rows) {
+    const monthKey = String(r.month ?? "").slice(0, 7); // YYYY-MM
+    const entry = byMonth.get(monthKey) ?? {
+      month: monthKey,
+      new_subscriptions: 0,
+      renewals: 0,
+      revenue_cents: 0,
+      payment_count: 0,
+    };
+    entry.new_subscriptions += r.new_subscriptions ?? 0;
+    entry.renewals += r.renewals ?? 0;
+    entry.revenue_cents += r.revenue_cents ?? 0;
+    entry.payment_count += r.payment_count ?? 0;
+    byMonth.set(monthKey, entry);
+  }
+  return Array.from(byMonth.values()).sort((a, b) =>
+    a.month.localeCompare(b.month)
+  );
+}
+
 export function LineChartPayments({ data }) {
-  // Format data for the chart
-  const chartData = data.map((item) => ({
-    date: new Date(item.date).toLocaleDateString("en-US", {
-      month: "short",
-      //day: "numeric",
-    }),
-    active: item.active / 100000,
-    expired: item.expired / 100000,
-    renewed: item.renewed / 100000,
+  const aggregated = aggregateByMonth(data ?? []);
+
+  const chartData = aggregated.map((item) => ({
+    date: item.month, // YYYY-MM
+    new_subscriptions: item.new_subscriptions
+      ? Math.round(item.revenue_cents * (item.new_subscriptions / (item.new_subscriptions + item.renewals)) / 100)
+      : 0,
+    renewals: item.renewals
+      ? Math.round(item.revenue_cents * (item.renewals / (item.new_subscriptions + item.renewals)) / 100)
+      : 0,
   }));
 
-  // Calculate totals for the summary
-  const totalActive = data
-    .reduce((sum, item) => sum + item.active / 100000, 0)
-    .toLocaleString("en-US", {
-      style: "currency",
-      currency: "USD",
-      currencyDisplay: "symbol",
-    });
-  const totalExpired = data
-    .reduce((sum, item) => sum + item.expired / 100000, 0)
-    .toLocaleString("en-US", {
-      style: "currency",
-      currency: "USD",
-      currencyDisplay: "symbol",
-    });
-  const totalRenewed = data
-    .reduce((sum, item) => sum + item.renewed / 100000, 0)
-    .toLocaleString("en-US", {
-      style: "currency",
-      currency: "USD",
-      currencyDisplay: "symbol",
-    });
-
-  const avgBounceRate =
-    data.length > 0
-      ? (
-          data.reduce((sum, item) => sum + item.expired, 0) / data.length
-        ).toFixed(1)
-      : 0;
+  const totalRevenue = aggregated.reduce(
+    (sum, item) => sum + item.revenue_cents / 100,
+    0
+  );
+  const totalNew = aggregated.reduce(
+    (sum, item) => sum + item.new_subscriptions,
+    0
+  );
+  const totalRenewals = aggregated.reduce(
+    (sum, item) => sum + item.renewals,
+    0
+  );
 
   return (
     <div className="container">
-      {/* Summary Cards */}
-      {/* Area Chart */}
       <Card>
         <CardHeader>
           <CardTitle>Year-To-Date Revenue</CardTitle>
           <CardDescription>
-            Aggregated monthly revenue by status
+            Aggregated monthly revenue — {totalNew} new · {totalRenewals} renewals ·
+            total ${totalRevenue.toLocaleString("en-US", { maximumFractionDigits: 0 })}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -89,12 +105,7 @@ export function LineChartPayments({ data }) {
             <AreaChart
               accessibilityLayer
               data={chartData}
-              margin={{
-                left: 12,
-                right: 12,
-                top: 12,
-                bottom: 12,
-              }}
+              margin={{ left: 12, right: 12, top: 12, bottom: 12 }}
             >
               <CartesianGrid vertical={false} />
               <XAxis
@@ -102,7 +113,7 @@ export function LineChartPayments({ data }) {
                 tickLine={false}
                 axisLine={false}
                 tickMargin={8}
-                tickFormatter={(value) => value.toLocaleString()}
+                tickFormatter={(value) => value}
               />
               <YAxis
                 tickLine={false}
@@ -113,6 +124,7 @@ export function LineChartPayments({ data }) {
                     style: "currency",
                     currency: "USD",
                     currencyDisplay: "symbol",
+                    maximumFractionDigits: 0,
                   })
                 }
               />
@@ -122,13 +134,11 @@ export function LineChartPayments({ data }) {
                 content={
                   <ChartTooltipContent
                     indicator="dot"
-                    formatter={(value, name, item, index) => (
+                    formatter={(value, name) => (
                       <>
                         <div
                           className="h-2.5 w-2.5 shrink-0 rounded-[2px] bg-(--color-bg)"
-                          style={{
-                            "--color-bg": `var(--color-${name})`,
-                          }}
+                          style={{ "--color-bg": `var(--color-${name})` }}
                         />
                         <div className="text-foreground ml-auto flex items-baseline gap-0.5 font-mono font-medium tabular-nums">
                           ${value}
@@ -140,27 +150,19 @@ export function LineChartPayments({ data }) {
                 }
               />
               <Area
-                dataKey="expired"
+                dataKey="new_subscriptions"
                 type="natural"
-                fill="var(--color-expired)"
+                fill="var(--color-new_subscriptions)"
                 fillOpacity={0.4}
-                stroke="var(--color-expired)"
+                stroke="var(--color-new_subscriptions)"
                 stackId="a"
               />
               <Area
-                dataKey="active"
+                dataKey="renewals"
                 type="natural"
-                fill="var(--color-new)"
+                fill="var(--color-renewals)"
                 fillOpacity={0.4}
-                stroke="var(--color-new)"
-                stackId="a"
-              />
-              <Area
-                dataKey="renewed"
-                type="natural"
-                fill="var(--color-renewed)"
-                fillOpacity={0.4}
-                stroke="var(--color-renewed)"
+                stroke="var(--color-renewals)"
                 stackId="a"
               />
             </AreaChart>
