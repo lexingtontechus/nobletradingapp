@@ -2,12 +2,10 @@
 
 import {
   SignInButton,
-  SignedIn,
-  SignedOut,
   UserButton,
   useUser,
   useAuth,
-  Protect,
+  Show
 } from "@clerk/nextjs";
 import Link from "next/link";
 import Logo from "./logo";
@@ -98,14 +96,14 @@ export default function Header() {
         </Link>
       </div>
       <div className=" flex-none uppercase ml-2 px-2">
-        <SignedOut>
+        <Show when="signed-out">
           <SignInButton forceRedirectUrl="/portal">
             <div className="btn btn-secondary rounded-full font-bold uppercase">
               Members
             </div>
           </SignInButton>
-        </SignedOut>
-        <SignedIn waitlistUrl="/waitlist" forceRedirectUrl="/portal">
+        </Show>
+        <Show when="signed-in">
           {/* <UserButton />*/}
           <UserButton>
             {/* user?.publicMetadata.role == "admin" &&) */}
@@ -126,7 +124,7 @@ export default function Header() {
               <UserButton.Action label="manageAccount" />
             </UserButton.MenuItems>
           </UserButton>
-        </SignedIn>
+        </Show>
       </div>
     </div>
   );

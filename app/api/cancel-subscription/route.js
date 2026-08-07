@@ -15,25 +15,28 @@
 // ALL users), disable the paylink in the Helio dashboard.
 // =============================================================================
 
-import { NextResponse } from "next/server";
-import { auth, clerkClient } from "@clerk/nextjs/server";
-import { createClient } from "@supabase/supabase-js";
+import { NextResponse } from "next/server"
+import { auth, clerkClient } from "@clerk/nextjs/server"
+import { createClient } from "@supabase/supabase-js"
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { persistSession: false } },
-);
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  { auth: { persistSession: false } }
+)
 
-export async function POST(req: Request) {
-  const { userId } = await auth();
+export async function POST(req) {
+  const { userId } = await auth()
   if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const { subscriptionId, reason } = await req.json();
+  const { subscriptionId, reason } = await req.json()
   if (!subscriptionId) {
-    return NextResponse.json({ error: "subscriptionId required" }, { status: 400 });
+    return NextResponse.json(
+      { error: "subscriptionId required" },
+      { status: 400 }
+    )
   }
 
   // Verify ownership: resolve local user from Clerk id, then check the sub belongs to them.
@@ -41,9 +44,9 @@ export async function POST(req: Request) {
     .from("users")
     .select("id")
     .eq("clerk_user_id", userId)
-    .single();
+    .single()
   if (!localUser) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
+    return NextResponse.json({ error: "User not found" }, { status: 404 })
   }
 
   const { data: sub, error } = await supabase
@@ -54,19 +57,19 @@ export async function POST(req: Request) {
       cancel_reason: reason ?? null,
       // Clear the pending charge so the cron doesn't keep reminding
       next_charge_url: null,
-      next_charge_token: null,
+      next_charge_token: null
     })
     .eq("id", subscriptionId)
     .eq("user_id", localUser.id) // ownership guard
     .in("status", ["active", "grace"]) // can only cancel an active/grace sub
     .select("id")
-    .single();
+    .single()
 
   if (error || !sub) {
     return NextResponse.json(
       { error: "Subscription not found or not cancellable" },
-      { status: 404 },
-    );
+      { status: 404 }
+    )
   }
 
   // 5. HYBRID AUTH PATTERN — mirror `subscriptionStatus=cancelled` into Clerk
@@ -74,14 +77,14 @@ export async function POST(req: Request) {
   //    subscription remains active until current_period_end (Helio doesn't
   //    refund the current cycle), but the badge reflects the user's intent.
   try {
-    const clerk = await clerkClient();
+    const clerk = await clerkClient()
     await clerk.users.updateUserMetadata(userId, {
-      publicMetadata: { subscriptionStatus: "cancelled" },
-    });
+      publicMetadata: { subscriptionStatus: "cancelled" }
+    })
   } catch (e) {
     // Non-fatal — Supabase is already updated; the badge will sync on next webhook.
-    console.error("Clerk metadata sync (cancel) failed:", e);
+    console.error("Clerk metadata sync (cancel) failed:", e)
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true })
 }

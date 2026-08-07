@@ -13,42 +13,48 @@
 //     redundant — Helio's managed bot assigns the role on payment.
 // =============================================================================
 
-import { createClient } from "@supabase/supabase-js";
-import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
-import Link from "next/link";
+import { createClient } from "@supabase/supabase-js"
+import {  Show, SignInButton } from "@clerk/nextjs"
+import Link from "next/link"
 
 // Server-side read of plans (anon key is fine — RLS allows public reads of
 // active plans; see the "plans public read" policy in 0001_init.sql).
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_ANON_KEY!,
-  { auth: { persistSession: false } },
-);
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_ANON_KEY,
+  { auth: { persistSession: false } }
+)
 
 export default async function PricingPage() {
   const { data: plans } = await supabase
     .from("plans")
-    .select("id, title, description, price_cents, currency, interval, sort_order")
+    .select(
+      "id, title, description, price_cents, currency, interval, sort_order"
+    )
     .eq("is_active", true)
-    .order("sort_order", { ascending: true });
+    .order("sort_order", { ascending: true })
 
   return (
     <main className="min-h-screen bg-base-200">
       <div className="mx-auto max-w-5xl px-4 py-16">
         <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold tracking-tight">Membership Plans</h1>
+          <h1 className="text-4xl font-bold tracking-tight">
+            Membership Plans
+          </h1>
           <p className="mt-3 text-lg opacity-70">
             Crypto subscriptions powered by MoonPay Commerce. Cancel anytime.
           </p>
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
-          {plans?.map((plan: any) => {
-            const isPopular = plan.title.toLowerCase().includes("precision");
+          {plans?.map(plan => {
+            const isPopular = plan.title.toLowerCase().includes("precision")
             return (
               <div
                 key={plan.id}
-                className={`card bg-base-100 shadow-xl ${isPopular ? "border-2 border-primary" : ""}`}
+                className={`card bg-base-100 shadow-xl ${
+                  isPopular ? "border-2 border-primary" : ""
+                }`}
               >
                 <div className="card-body">
                   {isPopular && (
@@ -57,12 +63,14 @@ export default async function PricingPage() {
                     </span>
                   )}
                   <h2 className="card-title text-2xl">{plan.title}</h2>
-                  <p className="opacity-70 min-h-[3rem]">{plan.description}</p>
+                  <p className="opacity-70 min-h-12">{plan.description}</p>
                   <div className="my-4">
                     <span className="text-4xl font-bold">
                       ${(plan.price_cents / 100).toFixed(0)}
                     </span>
-                    <span className="opacity-60">/{plan.interval.toLowerCase()}</span>
+                    <span className="opacity-60">
+                      /{plan.interval.toLowerCase()}
+                    </span>
                   </div>
                   <ul className="space-y-2 text-sm opacity-80">
                     <li>✓ Discord community access</li>
@@ -71,33 +79,31 @@ export default async function PricingPage() {
                     {isPopular && <li>✓ Advanced analytics dashboard</li>}
                   </ul>
                   <div className="card-actions mt-6">
-                    <SignedIn>
-                      <Link
-                        href="/portal"
-                        className="btn btn-primary w-full"
-                      >
+                    <Show when="signed-in">
+                      <Link href="/portal" className="btn btn-primary w-full">
                         Manage in Portal
                       </Link>
-                    </SignedIn>
-                    <SignedOut>
+                    </Show>
+                    <Show when="signed-out">
                       <SignInButton mode="modal">
                         <button className="btn btn-primary w-full">
                           Sign up to subscribe
                         </button>
                       </SignInButton>
-                    </SignedOut>
+                    </Show>
                   </div>
                 </div>
               </div>
-            );
+            )
           })}
         </div>
 
         <p className="text-center mt-12 text-sm opacity-50">
           Payments processed securely by MoonPay Commerce (Hel.io).
-          Subscriptions renew monthly — you'll get an email reminder before each renewal.
+          Subscriptions renew monthly — you'll get an email reminder before each
+          renewal.
         </p>
       </div>
     </main>
-  );
+  )
 }

@@ -145,6 +145,30 @@ Each plan has its own:
                                   └──────────────────────────────────────┘
 ```
 
+### Internal signal pipeline (how `signals:*` are produced)
+
+The streams subscribers consume (`signals:signal_scout`, `signals:precision_pro`)
+are produced by the **`noble-trader-fastapi-backend`** (LightningAI sweep
+orchestrator), which qualifies signals and `XADD`s them to `signal.raw.noble_trader`,
+then fan-out-splits to per-plan streams by `nt_symbol.plan_ids`:
+
+```
+noble-trader-fastapi-backend  ──XADD──▶ signal.raw.noble_trader (QUALIFIED)
+        │  StreamSplitter (backend-side) splits by plan
+        ├──▶ signals:signal_scout     (Signal Scout subscribers)
+        └──▶ signals:precision_pro    (Precision Pro subscribers)
+
+# Downstream (separate repos, same Redis):
+signal.raw.noble_trader ──▶ noble-trader-proxy (group "proxy") ──re-publish──▶ signal.proxy.noble_trader
+                                                                                     │
+                                                                  noble-trader-agent (group "noble-1") ─▶ mt4/5 bridge
+```
+
+- Subscriber Redis ACL users (provisioned by `redis-credentials-manager`) are
+  **read-only on `signals:*`** with `XREADGROUP` — they never write.
+- The proxy validates each `X-License-Key` against the `license_keys` table via
+  the `license-validate` Edge Function (this repo), keyed by plan (`nta_<plan_slug>`).
+
 ---
 
 ## The hybrid auth pattern (Clerk + Supabase)

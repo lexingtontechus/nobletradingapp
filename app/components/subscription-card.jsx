@@ -11,71 +11,80 @@
 // Replaces the old activeuser.jsx + selectplans.jsx split logic.
 // =============================================================================
 
-"use client";
+"use client"
 
-import { useState } from "react";
-import { useUser } from "@clerk/nextjs";
-import { HelioCheckout } from "@heliofi/checkout-react";
-import { SubscriptionStatusBadge } from "./subscription-status-badge";
+import { useState } from "react"
+import { useUser } from "@clerk/nextjs"
+import { HelioCheckout } from "@heliofi/checkout-react"
+import { SubscriptionStatusBadge } from "./subscription-status-badge"
 
-function formatDate(iso?: string) {
-  if (!iso) return "—";
+function formatDate(iso) {
+  if (!iso) return "—"
   return new Date(iso).toLocaleDateString("en-US", {
-    month: "short", day: "numeric", year: "numeric", timeZone: "UTC",
-  });
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC"
+  })
 }
 
-export function SubscriptionCard({ subscription, onStatusChange }: {
-  subscription: any;
-  onStatusChange?: () => void;
-}) {
-  const { user } = useUser();
-  const [cancelOpen, setCancelOpen] = useState(false);
-  const [cancelReason, setCancelReason] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+export function SubscriptionCard({ subscription, onStatusChange }) {
+  const { user } = useUser()
+  const [cancelOpen, setCancelOpen] = useState(false)
+  const [cancelReason, setCancelReason] = useState("")
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
 
-  if (!subscription) return null;
-  const plan = subscription.plans;
-  const status = subscription.status as "pending" | "active" | "grace" | "expired" | "cancelled";
+  if (!subscription) return null
+  const plan = subscription.plans
+  const status = subscription.status
 
   async function handleCancel() {
-    setBusy(true); setError(null);
+    setBusy(true)
+    setError(null)
     try {
       const r = await fetch("/api/cancel-subscription", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subscriptionId: subscription.id, reason: cancelReason }),
-      });
+        body: JSON.stringify({
+          subscriptionId: subscription.id,
+          reason: cancelReason
+        })
+      })
       if (!r.ok) {
-        const b = await r.json();
-        throw new Error(b.error || "Cancel failed");
+        const b = await r.json()
+        throw new Error(b.error || "Cancel failed")
       }
-      setCancelOpen(false);
-      onStatusChange?.();
-    } catch (e: any) {
-      setError(e.message);
-    } finally { setBusy(false); }
+      setCancelOpen(false)
+      onStatusChange?.()
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function handleRenewNow() {
-    setBusy(true); setError(null);
+    setBusy(true)
+    setError(null)
     try {
       const r = await fetch("/api/create-charge", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subscriptionId: subscription.id }),
-      });
+        body: JSON.stringify({ subscriptionId: subscription.id })
+      })
       if (!r.ok) {
-        const b = await r.json();
-        throw new Error(b.error || "Renew failed");
+        const b = await r.json()
+        throw new Error(b.error || "Renew failed")
       }
-      const { chargeUrl } = await r.json();
+      const { chargeUrl } = await r.json()
       // Open the Helio charge page in a new tab (deep-link, optimal for mobile)
-      window.open(chargeUrl, "_blank");
-    } catch (e: any) {
-      setError(e.message);
-    } finally { setBusy(false); }
+      window.open(chargeUrl, "_blank")
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -84,9 +93,12 @@ export function SubscriptionCard({ subscription, onStatusChange }: {
         {/* Header: plan title + status badge */}
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="card-title text-2xl">{plan?.title ?? "Subscription"}</h2>
+            <h2 className="card-title text-2xl">
+              {plan?.title ?? "Subscription"}
+            </h2>
             <p className="opacity-60 text-sm">
-              ${(plan?.price_cents / 100).toFixed(0)}/{plan?.interval?.toLowerCase()} · {plan?.currency}
+              ${(plan?.price_cents / 100).toFixed(0)}/
+              {plan?.interval?.toLowerCase()} · {plan?.currency}
             </p>
           </div>
           <SubscriptionStatusBadge status={status} />
@@ -105,15 +117,19 @@ export function SubscriptionCard({ subscription, onStatusChange }: {
               <div className="flex justify-between">
                 <span className="opacity-60">Current period</span>
                 <span>
-                  {formatDate(subscription.current_period_start)} → {formatDate(subscription.current_period_end)}
+                  {formatDate(subscription.current_period_start)} →{" "}
+                  {formatDate(subscription.current_period_end)}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="opacity-60">Next renewal</span>
-                <span className="font-semibold">{formatDate(subscription.current_period_end)}</span>
+                <span className="font-semibold">
+                  {formatDate(subscription.current_period_end)}
+                </span>
               </div>
               <div className="opacity-60 text-xs pt-1">
-                You'll get an email reminder before your renewal date. Renew with a single wallet tap.
+                You'll get an email reminder before your renewal date. Renew
+                with a single wallet tap.
               </div>
             </>
           )}
@@ -122,15 +138,20 @@ export function SubscriptionCard({ subscription, onStatusChange }: {
             <>
               <div className="alert alert-error">
                 <div>
-                  <div className="font-semibold">Your subscription has lapsed into grace</div>
+                  <div className="font-semibold">
+                    Your subscription has lapsed into grace
+                  </div>
                   <div className="text-xs">
-                    Renew by {formatDate(subscription.grace_period_end)} to keep your Discord access.
+                    Renew by {formatDate(subscription.grace_period_end)} to keep
+                    your Discord access.
                   </div>
                 </div>
               </div>
               <div className="flex justify-between">
                 <span className="opacity-60">Grace ends</span>
-                <span className="font-semibold text-error">{formatDate(subscription.grace_period_end)}</span>
+                <span className="font-semibold text-error">
+                  {formatDate(subscription.grace_period_end)}
+                </span>
               </div>
             </>
           )}
@@ -167,13 +188,13 @@ export function SubscriptionCard({ subscription, onStatusChange }: {
                 customTexts: { mainButtonTitle: ` Complete payment ` },
                 additionalJSON: {
                   subscription_id: subscription.id,
-                  user_id: user?.id,
+                  user_id: user?.id
                 },
                 onSuccess: () => onStatusChange?.(),
-                onError: (e: any) => console.error(e),
-                onPending: (e: any) => console.log(e),
+                onError: e => console.error(e),
+                onPending: e => console.log(e),
                 onCancel: () => {},
-                onStartPayment: () => {},
+                onStartPayment: () => {}
               }}
             />
           )}
@@ -187,28 +208,40 @@ export function SubscriptionCard({ subscription, onStatusChange }: {
             <div className="modal-box">
               <h3 className="font-bold text-lg">Cancel subscription?</h3>
               <p className="py-4 text-sm opacity-70">
-                Your subscription stays active until {formatDate(subscription.current_period_end)}.
-                After that, it won't renew. Your Discord role will be removed.
+                Your subscription stays active until{" "}
+                {formatDate(subscription.current_period_end)}. After that, it
+                won't renew. Your Discord role will be removed.
               </p>
               <textarea
                 className="textarea textarea-bordered w-full"
                 placeholder="Reason (optional)"
                 value={cancelReason}
-                onChange={(e) => setCancelReason(e.target.value)}
+                onChange={e => setCancelReason(e.target.value)}
               />
               <div className="modal-action">
-                <button className="btn btn-ghost" onClick={() => setCancelOpen(false)} disabled={busy}>
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => setCancelOpen(false)}
+                  disabled={busy}
+                >
                   Keep subscription
                 </button>
-                <button className="btn btn-error" onClick={handleCancel} disabled={busy}>
+                <button
+                  className="btn btn-error"
+                  onClick={handleCancel}
+                  disabled={busy}
+                >
                   {busy ? "Cancelling…" : "Confirm cancel"}
                 </button>
               </div>
             </div>
-            <div className="modal-backdrop" onClick={() => setCancelOpen(false)} />
+            <div
+              className="modal-backdrop"
+              onClick={() => setCancelOpen(false)}
+            />
           </div>
         )}
       </div>
     </div>
-  );
+  )
 }

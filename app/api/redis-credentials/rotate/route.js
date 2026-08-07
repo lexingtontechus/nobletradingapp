@@ -16,20 +16,20 @@
 // client without checking it belongs to them).
 // =============================================================================
 
-import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
-import { createClient } from "@supabase/supabase-js";
+import { NextResponse } from "next/server"
+import { auth } from "@clerk/nextjs/server"
+import { createClient } from "@supabase/supabase-js"
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { persistSession: false } },
-);
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  { auth: { persistSession: false } }
+)
 
 export async function POST() {
-  const { userId } = await auth();
+  const { userId } = await auth()
   if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
   // 1. Resolve local user
@@ -37,52 +37,56 @@ export async function POST() {
     .from("users")
     .select("id")
     .eq("clerk_user_id", userId)
-    .maybeSingle();
+    .maybeSingle()
   if (!localUser) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
+    return NextResponse.json({ error: "User not found" }, { status: 404 })
   }
 
   // 2. Find the user's active subscription with non-revoked creds
   const { data: sub, error } = await supabase
     .from("subscriptions")
-    .select(`
+    .select(
+      `
       id, status,
       redis_credentials(id, revoked_at)
-    `)
+    `
+    )
     .eq("user_id", localUser.id)
     .in("status", ["active", "grace"])
     .order("created_at", { ascending: false })
     .limit(1)
-    .maybeSingle();
+    .maybeSingle()
 
   if (error || !sub) {
     return NextResponse.json(
       { error: "No active subscription to rotate" },
-      { status: 404 },
-    );
+      { status: 404 }
+    )
   }
 
-  const hasActiveCreds = (sub.redis_credentials ?? []).some((c: any) => !c.revoked_at);
+  const hasActiveCreds = (sub.redis_credentials ?? []).some(c => !c.revoked_at)
   if (!hasActiveCreds) {
     return NextResponse.json(
       { error: "No active Redis credentials to rotate" },
-      { status: 404 },
-    );
+      { status: 404 }
+    )
   }
 
   // 3. Call the Edge Function (server-to-server, with the internal secret).
   //    The function URL is constructed from SUPABASE_URL env (Next.js side
   //    has NEXT_PUBLIC_SUPABASE_URL; the functions subdomain is the same host
   //    with /functions/v1/<name>).
-  const functionsUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/redis-credentials-manager`;
-  const internalSecret = process.env.INTERNAL_FUNCTION_SECRET;
+  const functionsUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/redis-credentials-manager`
+  const internalSecret = process.env.INTERNAL_FUNCTION_SECRET
 
   if (!internalSecret) {
-    console.error("INTERNAL_FUNCTION_SECRET not set — cannot call Edge Function");
+    console.error(
+      "INTERNAL_FUNCTION_SECRET not set — cannot call Edge Function"
+    )
     return NextResponse.json(
       { error: "Server misconfigured: missing internal secret" },
-      { status: 500 },
-    );
+      { status: 500 }
+    )
   }
 
   try {
@@ -91,34 +95,34 @@ export async function POST() {
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-        "X-Internal-Secret": internalSecret,
+        "X-Internal-Secret": internalSecret
       },
       body: JSON.stringify({
         action: "rotate",
-        subscriptionId: sub.id,
-      }),
-    });
+        subscriptionId: sub.id
+      })
+    })
 
     if (!resp.ok) {
-      const text = await resp.text();
-      console.error("Edge Function rotate failed:", resp.status, text);
+      const text = await resp.text()
+      console.error("Edge Function rotate failed:", resp.status, text)
       return NextResponse.json(
         { error: `Rotation failed: ${text}` },
-        { status: 502 },
-      );
+        { status: 502 }
+      )
     }
 
-    const result = await resp.json();
+    const result = await resp.json()
     return NextResponse.json({
       ok: true,
       passwordVersion: result.passwordVersion,
-      rotatedAt: new Date().toISOString(),
-    });
-  } catch (e: any) {
-    console.error("Rotate error:", e);
+      rotatedAt: new Date().toISOString()
+    })
+  } catch (e) {
+    console.error("Rotate error:", e)
     return NextResponse.json(
       { error: e.message || "Rotation request failed" },
-      { status: 500 },
-    );
+      { status: 500 }
+    )
   }
 }

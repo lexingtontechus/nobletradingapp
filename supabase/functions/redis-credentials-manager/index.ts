@@ -95,6 +95,14 @@ async function encrypt(plaintext: string): Promise<{ cipher: string; iv: string 
 // -----------------------------------------------------------------------------
 // Password + username generators (URL-safe charset so creds work in rediss://)
 // -----------------------------------------------------------------------------
+// Plan prefix stamped onto the Redis username (first "-" token) so any
+// consumer can derive the plan without a DB lookup. Future-proof: add a
+// new plan here and the prefix propagates to the credential automatically.
+const PLAN_PREFIX: Record<string, string> = {
+  signal_scout: "ps",
+  precision_pro: "pp",
+};
+
 function generatePassword(length = 32): string {
   // URL-safe alphabet (RFC 3986 unreserved) — no +/= so it embeds cleanly in URLs.
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
@@ -104,13 +112,16 @@ function generatePassword(length = 32): string {
   return pwd;
 }
 
-function generateUsername(): string {
-  // sub_<32 hex chars> — 128 bits of entropy, fits Redis ACL username constraints.
+function generateUsername(planPrefix: string, kind: "sub" | "pub" = "sub"): string {
+  // <planPrefix>-<kind>_<32 hex chars> — e.g. "pp-sub-a1b2..." or "ps-pub-c3d4...".
+  // The plan prefix (ps=Signal Scout, pp=Precision Pro) is the FIRST token when
+  // split on "-", so any consumer derives the plan from the Redis username
+  // without a DB lookup. Future-proof: a new plan just adds a prefix to PLAN_PREFIX.
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   const hex = Array.from(bytes)
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
-  return `sub_${hex}`;
+  return `${planPrefix}-${kind}_${hex}`;
 }
 
 function generateApiKey(): string {
@@ -180,7 +191,8 @@ async function handleProvision(body: {
     .eq("id", body.planId)
     .maybeSingle();
 
-  const username = generateUsername();
+  const prefix = PLAN_PREFIX[plan?.slug ?? ""] ?? "ps";
+  const username = generateUsername(prefix);
   const password = generatePassword(32);
   const apiKey = generateApiKey();
   const streamName = `signals:${plan?.slug ?? body.planId}`;

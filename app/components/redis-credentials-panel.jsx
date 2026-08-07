@@ -22,120 +22,113 @@
 //   - Subscription is 'expired' or 'cancelled' (creds revoked)
 // =============================================================================
 
-"use client";
-
-import { useState, useCallback } from "react";
-import { Copy, Check, RefreshCw, Eye, EyeOff, Download, AlertTriangle, Terminal } from "lucide-react";
-
-interface CredentialBundle {
-  subscriptionId: string;
-  subscriptionStatus: string;
-  planName: string;
-  planSlug: string | null;
-  redisUrl: string;
-  redisUsername: string;
-  redisPassword: string;
-  streamName: string;
-  consumerGroup: string;
-  apiKey: string | null;
-  rotatedAt: string;
-  passwordVersion: number;
-}
+"use client"
+import { useState, useCallback } from "react"
+import {
+  Copy,
+  Check,
+  RefreshCw,
+  Eye,
+  EyeOff,
+  Download,
+  AlertTriangle,
+  Terminal
+} from "lucide-react"
 
 export function RedisCredentialsPanel() {
-  const [revealed, setRevealed] = useState(false);
-  const [bundle, setBundle] = useState<CredentialBundle | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  const [copiedAll, setCopiedAll] = useState(false);
-  const [rotateOpen, setRotateOpen] = useState(false);
-  const [rotating, setRotating] = useState(false);
+  const [revealed, setRevealed] = useState(false)
+  const [bundle, setBundle] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [copiedKey, setCopiedKey] = useState(null)
+  const [copiedAll, setCopiedAll] = useState(false)
+  const [rotateOpen, setRotateOpen] = useState(false)
+  const [rotating, setRotating] = useState(false)
 
   const fetchCreds = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+    setLoading(true)
+    setError(null)
     try {
-      const r = await fetch("/api/redis-credentials", { cache: "no-store" });
+      const r = await fetch("/api/redis-credentials", { cache: "no-store" })
       if (!r.ok) {
-        const b = await r.json().catch(() => ({}));
-        throw new Error(b.error || `Failed (${r.status})`);
+        const b = await r.json().catch(() => ({}))
+        throw new Error(b.error || `Failed (${r.status})`)
       }
-      const data: CredentialBundle = await r.json();
-      setBundle(data);
-    } catch (e: any) {
-      setError(e.message);
+      const data = await r.json()
+      setBundle(data)
+    } catch (e) {
+      setError(e.message)
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  }, []);
+  }, [])
 
   function handleReveal() {
-    setRevealed(true);
-    if (!bundle) fetchCreds();
+    setRevealed(true)
+    if (!bundle) fetchCreds()
   }
 
   function handleHide() {
-    setRevealed(false);
+    setRevealed(false)
     // Don't clear the bundle — user might re-reveal quickly; avoids re-fetch.
   }
 
-  async function copy(text: string, key: string) {
+  async function copy(text, key) {
     try {
-      await navigator.clipboard.writeText(text);
-      setCopiedKey(key);
-      setTimeout(() => setCopiedKey(null), 1500);
+      await navigator.clipboard.writeText(text)
+      setCopiedKey(key)
+      setTimeout(() => setCopiedKey(null), 1500)
     } catch {
       // Fallback for older browsers / insecure contexts
-      const ta = document.createElement("textarea");
-      ta.value = text;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand("copy");
-      document.body.removeChild(ta);
-      setCopiedKey(key);
-      setTimeout(() => setCopiedKey(null), 1500);
+      const ta = document.createElement("textarea")
+      ta.value = text
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand("copy")
+      document.body.removeChild(ta)
+      setCopiedKey(key)
+      setTimeout(() => setCopiedKey(null), 1500)
     }
   }
 
   function copyAll() {
-    if (!bundle) return;
-    const text = renderEnvFile(bundle);
-    copy(text, "__all__");
-    setCopiedAll(true);
-    setTimeout(() => setCopiedAll(false), 1500);
+    if (!bundle) return
+    const text = renderEnvFile(bundle)
+    copy(text, "__all__")
+    setCopiedAll(true)
+    setTimeout(() => setCopiedAll(false), 1500)
   }
 
   function downloadEnv() {
-    if (!bundle) return;
-    const text = renderEnvFile(bundle);
-    const blob = new Blob([text], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `.env.nta.${bundle.planSlug ?? "subscription"}`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    if (!bundle) return
+    const text = renderEnvFile(bundle)
+    const blob = new Blob([text], { type: "text/plain" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `.env.nta.${bundle.planSlug ?? "subscription"}`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
   }
 
   async function handleRotate() {
-    setRotating(true);
-    setError(null);
+    setRotating(true)
+    setError(null)
     try {
-      const r = await fetch("/api/redis-credentials/rotate", { method: "POST" });
+      const r = await fetch("/api/redis-credentials/rotate", { method: "POST" })
       if (!r.ok) {
-        const b = await r.json().catch(() => ({}));
-        throw new Error(b.error || `Failed (${r.status})`);
+        const b = await r.json().catch(() => ({}))
+        throw new Error(b.error || `Failed (${r.status})`)
       }
-      setRotateOpen(false);
+      setRotateOpen(false)
       // Refetch to show the new password
-      await fetchCreds();
-    } catch (e: any) {
-      setError(e.message);
+      await fetchCreds()
+    } catch (e) {
+      setError(e.message)
     } finally {
-      setRotating(false);
+      setRotating(false)
     }
   }
 
@@ -167,7 +160,7 @@ export function RedisCredentialsPanel() {
           </div>
         </div>
       </div>
-    );
+    )
   }
 
   // ---------------------------------------------------------------------------
@@ -195,7 +188,11 @@ export function RedisCredentialsPanel() {
             disabled={!bundle || loading}
             title="Copy all"
           >
-            {copiedAll ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+            {copiedAll ? (
+              <Check className="w-3.5 h-3.5" />
+            ) : (
+              <Copy className="w-3.5 h-3.5" />
+            )}
             {copiedAll ? "Copied" : "Copy all"}
           </button>
           <button
@@ -228,13 +225,20 @@ export function RedisCredentialsPanel() {
           <div className="text-red-400">
             <AlertTriangle className="w-4 h-4 inline mr-2" />
             {error}
-            <button className="btn btn-xs btn-ghost ml-2 text-zinc-300" onClick={fetchCreds}>
+            <button
+              className="btn btn-xs btn-ghost ml-2 text-zinc-300"
+              onClick={fetchCreds}
+            >
               Retry
             </button>
           </div>
         )}
         {bundle && !loading && (
-          <CredentialsLines bundle={bundle} copiedKey={copiedKey} onCopy={copy} />
+          <CredentialsLines
+            bundle={bundle}
+            copiedKey={copiedKey}
+            onCopy={copy}
+          />
         )}
       </div>
 
@@ -254,7 +258,9 @@ export function RedisCredentialsPanel() {
             onClick={() => setRotateOpen(true)}
             disabled={!bundle || rotating}
           >
-            <RefreshCw className={`w-4 h-4 ${rotating ? "animate-spin" : ""}`} />
+            <RefreshCw
+              className={`w-4 h-4 ${rotating ? "animate-spin" : ""}`}
+            />
             Rotate credentials
           </button>
         </div>
@@ -269,9 +275,10 @@ export function RedisCredentialsPanel() {
               Rotate credentials?
             </h3>
             <p className="py-4 text-sm opacity-80">
-              This generates a new password and <strong>instantly invalidates</strong>{" "}
-              the current one. Any bot using the old password will disconnect
-              within seconds. Make sure you can update your bot's config right away.
+              This generates a new password and{" "}
+              <strong>instantly invalidates</strong> the current one. Any bot
+              using the old password will disconnect within seconds. Make sure
+              you can update your bot's config right away.
             </p>
             <p className="text-sm opacity-70 pb-2">
               The rotation is <strong>zero-downtime on the Redis side</strong> —
@@ -295,36 +302,31 @@ export function RedisCredentialsPanel() {
               </button>
             </div>
           </div>
-          <div className="modal-backdrop" onClick={() => !rotating && setRotateOpen(false)} />
+          <div
+            className="modal-backdrop"
+            onClick={() => !rotating && setRotateOpen(false)}
+          />
         </div>
       )}
     </div>
-  );
+  )
 }
 
 // -----------------------------------------------------------------------------
 // The actual env-var lines, with per-line copy buttons + syntax highlighting
 // -----------------------------------------------------------------------------
-function CredentialsLines({
-  bundle,
-  copiedKey,
-  onCopy,
-}: {
-  bundle: CredentialBundle;
-  copiedKey: string | null;
-  onCopy: (text: string, key: string) => void;
-}) {
-  const lines: Array<{ key: string; value: string; comment?: string }> = [
+function CredentialsLines({ bundle, copiedKey, onCopy }) {
+  const lines = [
     { key: "REDIS_URL", value: bundle.redisUrl },
     { key: "REDIS_USERNAME", value: bundle.redisUsername },
     { key: "REDIS_PASSWORD", value: bundle.redisPassword },
     { key: "REDIS_STREAM_SIGNALS", value: bundle.streamName },
     { key: "REDIS_CONSUMER_GROUP", value: bundle.consumerGroup },
     { key: "NTA_PLAN", value: bundle.planSlug ?? bundle.planName },
-    { key: "NTA_SUBSCRIPTION_ID", value: bundle.subscriptionId },
-  ];
+    { key: "NTA_SUBSCRIPTION_ID", value: bundle.subscriptionId }
+  ]
   if (bundle.apiKey) {
-    lines.push({ key: "NTA_API_KEY", value: bundle.apiKey });
+    lines.push({ key: "NTA_API_KEY", value: bundle.apiKey })
   }
 
   return (
@@ -333,13 +335,17 @@ function CredentialsLines({
       <CommentLine text={`# Noble Trading App — Signal Stream Credentials`} />
       <CommentLine text={`# Plan: ${bundle.planName}`} />
       <CommentLine
-        text={`# Generated: ${new Date(bundle.rotatedAt).toISOString()} (password v${bundle.passwordVersion})`}
+        text={`# Generated: ${new Date(
+          bundle.rotatedAt
+        ).toISOString()} (password v${bundle.passwordVersion})`}
       />
-      <CommentLine text={`# WARNING: keep these secret. Rotate immediately if leaked.`} />
+      <CommentLine
+        text={`# WARNING: keep these secret. Rotate immediately if leaked.`}
+      />
       <div className="h-2" />
 
       {/* Env var lines */}
-      {lines.map((line) => (
+      {lines.map(line => (
         <div
           key={line.key}
           className="group relative flex items-center hover:bg-zinc-900/60 -mx-2 px-2 rounded"
@@ -372,7 +378,9 @@ function CredentialsLines({
         copyKey="__cmd1__"
       />
       <div className="h-1.5" />
-      <CommentLine text={`# Read latest 10 signals (new consumer — auto-creates the group):`} />
+      <CommentLine
+        text={`# Read latest 10 signals (new consumer — auto-creates the group):`}
+      />
       <CommandLine
         text={`redis-cli -u "$REDIS_URL" XGROUP CREATE "$REDIS_STREAM_SIGNALS" "$REDIS_CONSUMER_GROUP" $ MKSTREAM`}
         onCopy={onCopy}
@@ -388,24 +396,14 @@ function CredentialsLines({
         copyKey="__cmd3__"
       />
     </div>
-  );
+  )
 }
 
-function CommentLine({ text }: { text: string }) {
-  return <div className="text-zinc-500 text-xs leading-relaxed">{text}</div>;
+function CommentLine({ text }) {
+  return <div className="text-zinc-500 text-xs leading-relaxed">{text}</div>
 }
 
-function CommandLine({
-  text,
-  onCopy,
-  copied,
-  copyKey,
-}: {
-  text: string;
-  onCopy: (text: string, key: string) => void;
-  copied: boolean;
-  copyKey: string;
-}) {
+function CommandLine({ text, onCopy, copied, copyKey }) {
   return (
     <div className="group relative flex items-start hover:bg-zinc-900/60 -mx-2 px-2 rounded">
       <span className="text-sky-300/90 break-all pr-8">$ {text}</span>
@@ -421,17 +419,19 @@ function CommandLine({
         )}
       </button>
     </div>
-  );
+  )
 }
 
 // -----------------------------------------------------------------------------
 // Render the credentials bundle as a .env file (for copy-all + download)
 // -----------------------------------------------------------------------------
-function renderEnvFile(b: CredentialBundle): string {
+function renderEnvFile(b) {
   const lines = [
     `# Noble Trading App — Signal Stream Credentials`,
     `# Plan: ${b.planName}`,
-    `# Generated: ${new Date(b.rotatedAt).toISOString()} (password v${b.passwordVersion})`,
+    `# Generated: ${new Date(b.rotatedAt).toISOString()} (password v${
+      b.passwordVersion
+    })`,
     `# WARNING: keep these secret. Rotate immediately if leaked.`,
     ``,
     `REDIS_URL=${b.redisUrl}`,
@@ -440,8 +440,8 @@ function renderEnvFile(b: CredentialBundle): string {
     `REDIS_STREAM_SIGNALS=${b.streamName}`,
     `REDIS_CONSUMER_GROUP=${b.consumerGroup}`,
     `NTA_PLAN=${b.planSlug ?? b.planName}`,
-    `NTA_SUBSCRIPTION_ID=${b.subscriptionId}`,
-  ];
-  if (b.apiKey) lines.push(`NTA_API_KEY=${b.apiKey}`);
-  return lines.join("\n");
+    `NTA_SUBSCRIPTION_ID=${b.subscriptionId}`
+  ]
+  if (b.apiKey) lines.push(`NTA_API_KEY=${b.apiKey}`)
+  return lines.join("\n")
 }
