@@ -96,7 +96,7 @@ export default function Header() {
         </Link>
       </div>
       <div className=" flex-none uppercase ml-2 px-2">
-        <Show when="signed-out">
+        <Show when="signed-out" forceRedirectUrl="/portal">
           <SignInButton forceRedirectUrl="/portal">
             <div className="btn btn-secondary rounded-full font-bold uppercase">
               Members

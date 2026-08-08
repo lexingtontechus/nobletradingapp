@@ -14,8 +14,9 @@
 // =============================================================================
 
 import { createClient } from "@supabase/supabase-js"
-import {  Show, SignInButton } from "@clerk/nextjs"
+import { Show, SignInButton } from "@clerk/nextjs"
 import Link from "next/link"
+import CheckoutButton from "../components/checkout"
 
 // Server-side read of plans (anon key is fine — RLS allows public reads of
 // active plans; see the "plans public read" policy in 0001_init.sql).
@@ -80,9 +81,15 @@ export default async function PricingPage() {
                   </ul>
                   <div className="card-actions mt-6">
                     <Show when="signed-in">
-                      <Link href="/portal" className="btn btn-primary w-full">
-                        Manage in Portal
-                      </Link>
+                      <div className="w-full flex flex-col gap-2">
+                        <CheckoutButton plan={plan} />
+                        <Link
+                          href="/portal"
+                          className="btn btn-ghost btn-sm w-full"
+                        >
+                          Manage in Portal
+                        </Link>
+                      </div>
                     </Show>
                     <Show when="signed-out">
                       <SignInButton mode="modal">

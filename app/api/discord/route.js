@@ -1,3 +1,14 @@
+// =============================================================================
+// Noble Trading App — DEPRECATED: Discord membership search route
+// =============================================================================
+// DO NOT USE. Discord access is now handled entirely by MoonPay/Helio's managed
+// Discord bot (paylink captures the buyer's Discord account at checkout and the
+// bot assigns/removes the role). The Helio webhook writes users.discord_id /
+// discord_username + Clerk publicMetadata.discordId. This legacy route (guild
+// member search by username) is kept only for the archived _page.jsx flow and
+// will be removed.
+// =============================================================================
+
 import { NextResponse } from "next/server"
 import { auth, clerkClient } from "@clerk/nextjs/server"
 

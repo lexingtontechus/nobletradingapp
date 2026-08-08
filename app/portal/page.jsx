@@ -29,6 +29,7 @@ import Link from "next/link"
 import { SubscriptionCard } from "../components/subscription-card"
 import { SubscriptionStatusBadge } from "../components/subscription-status-badge"
 import { RedisCredentialsPanel } from "../components/redis-credentials-panel"
+import PlanSelector from "../components/plan-selector"
 
 // -----------------------------------------------------------------------------
 // HYBRID AUTH PATTERN (see supabase/functions/helio-webhook/index.ts):
@@ -61,7 +62,6 @@ export default function Portal() {
   const pm = user?.publicMetadata ?? {}
   const instantStatus = pm.subscriptionStatus ?? null
   const instantPlan = pm.plan ?? null
-  const instantDiscordJoined = !!pm.discordId
   const isAdmin = pm.role === "admin"
 
   const refresh = useCallback(async () => {
@@ -149,7 +149,6 @@ export default function Portal() {
   // Prefer the fresh API value; fall back to the instant Clerk-cached value.
   const effectiveStatus = sub?.status ?? instantStatus ?? null
   const hasActive = !!sub && ["pending", "active", "grace"].includes(sub.status)
-  const discordJoined = !!data?.user?.discord_id || instantDiscordJoined
 
   return (
     <div className="min-h-screen bg-base-200">
@@ -193,7 +192,6 @@ export default function Portal() {
         {/* Onboarding checklist (progressive) */}
         <OnboardingChecklist
           accountCreated
-          discordJoined={discordJoined}
           hasSubscription={!!hasActive || instantStatus === "active"}
           subscriptionActive={
             sub?.status === "active" || instantStatus === "active"
@@ -314,18 +312,20 @@ export default function Portal() {
 
 // -----------------------------------------------------------------------------
 // Onboarding checklist — progressive disclosure of next steps
+// Discord is NOT a step: MoonPay/Helio auto-joins the Discord server and
+// assigns the role at checkout (the webhook writes users.discord_id), so the
+// checklist reflects that Discord access arrives with an active subscription.
 // -----------------------------------------------------------------------------
 function OnboardingChecklist({
   accountCreated,
-  discordJoined,
   hasSubscription,
   subscriptionActive
 }) {
   const steps = [
     { label: "Create account", done: accountCreated },
-    { label: "Join Discord community", done: discordJoined, optional: true },
     { label: "Choose a plan", done: hasSubscription },
-    { label: "Activate subscription", done: subscriptionActive }
+    { label: "Activate subscription", done: subscriptionActive },
+    { label: "Discord access (auto)", done: subscriptionActive }
   ]
   const doneCount = steps.filter(s => s.done).length
 
@@ -353,20 +353,7 @@ function OnboardingChecklist({
               )}
               <span className={s.done ? "line-through opacity-50" : ""}>
                 {s.label}
-                {s.optional && (
-                  <span className="opacity-40 ml-1">(optional)</span>
-                )}
               </span>
-              {!s.done && s.label === "Join Discord community" && (
-                <a
-                  href={process.env.NEXT_PUBLIC_DISCORD_URL}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="btn btn-xs btn-outline ml-auto"
-                >
-                  Join
-                </a>
-              )}
               {!s.done && s.label === "Choose a plan" && (
                 <Link
                   href="/pricing"
@@ -384,20 +371,20 @@ function OnboardingChecklist({
 }
 
 // -----------------------------------------------------------------------------
-// No active subscription — CTA to pick a plan
+// No active subscription — inline plan picker (Helio checkout)
 // -----------------------------------------------------------------------------
 function NoSubscriptionCard({ onChosePlan }) {
   return (
     <div className="card bg-base-100 shadow border border-base-300">
-      <div className="card-body items-center text-center">
-        <h2 className="card-title text-2xl">No active subscription</h2>
-        <p className="opacity-70">
-          Choose a plan to unlock trade signals and our Discord community.
+      <div className="card-body">
+        <h2 className="card-title text-2xl">Choose a plan</h2>
+        <p className="opacity-70 text-sm">
+          Pick a plan to unlock trade signals and Discord community access.
+          You'll be asked to connect your Discord account at checkout —
+          MoonPay handles the join automatically.
         </p>
-        <div className="card-actions mt-4">
-          <Link href="/pricing" className="btn btn-primary">
-            View plans
-          </Link>
+        <div className="mt-4">
+          <PlanSelector />
         </div>
       </div>
     </div>
