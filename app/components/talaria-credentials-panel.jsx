@@ -342,7 +342,7 @@ function TalariaLines({ bundle, copiedKey, onCopy }) {
         >
           <span className="text-emerald-400">{line.key}</span>
           <span className="text-zinc-500 mx-1">=</span>
-          <span className="text-amber-300 break-all">{line.value}</span>
+          <span className="text-amber-300 break-all lowercase">{line.value}</span>
           <button
             className="absolute right-0 top-0.5 opacity-0 group-hover:opacity-100 transition-opacity btn btn-xs btn-ghost text-zinc-400 hover:text-zinc-100 px-2"
             onClick={() => onCopy(line.value, line.key)}
