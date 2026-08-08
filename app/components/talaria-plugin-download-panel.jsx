@@ -55,7 +55,7 @@ export function TalariaPluginDownloadPanel() {
         </div>
 
         <div className="mt-3 flex flex-col sm:flex-row gap-2">
-          <code className="flex-1 break-all bg-base-200 rounded-lg px-3 py-2 text-sm font-mono">
+          <code className="flex-1 break-all bg-base-200 rounded-lg px-3 py-2 text-sm font-mono lowercase">
             {PLUGIN_URL}
           </code>
           <div className="flex gap-2">
