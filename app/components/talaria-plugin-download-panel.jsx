@@ -48,7 +48,7 @@ export function TalariaPluginDownloadPanel() {
             <div>
               <h3 className="font-semibold">Talaria plugin — Precision Pro</h3>
               <p className="text-sm opacity-60">
-                Download the Talaria desktop plugin for the Hermes agent.
+                Download the Talaria desktop plugin for Hermes agent.
               </p>
             </div>
           </div>
