@@ -7,8 +7,9 @@ Noble Trading App is a full-stack subscription commerce product that lets
 traders subscribe to two tiers of real-time trade signals — **Signal Scout**
 ($79/mo) and **Precision Pro** ($199/mo) — paid in crypto via
 [Helio / MoonPay Commerce](https://www.hel.io/), with automated renewal
-reminders, Discord role sync, and **per-subscriber Redis ACL credentials**
-for direct stream consumption by the subscriber's own trading bots.
+reminders, Discord role sync (Helio's managed bot), and a **Talaria claim
+token** that authorizes the subscriber's own Hermes agent / trading client
+against Supabase for the live signal stream.
 
 ---
 
@@ -19,18 +20,19 @@ for direct stream consumption by the subscriber's own trading bots.
 3. [Architecture at a glance](#architecture-at-a-glance)
 4. [The hybrid auth pattern (Clerk + Supabase)](#the-hybrid-auth-pattern-clerk--supabase)
 5. [Subscription lifecycle](#subscription-lifecycle)
-6. [Redis credential lifecycle](#redis-credential-lifecycle)
-7. [Renewal reminders (AgentMail)](#renewal-reminders-agentmail)
-8. [Tech stack](#tech-stack)
-9. [Project structure](#project-structure)
-10. [Database schema (migrations)](#database-schema-migrations)
-11. [Edge Functions (Supabase)](#edge-functions-supabase)
-12. [Next.js API routes](#nextjs-api-routes)
-13. [Environment variables](#environment-variables)
-14. [Security model](#security-model)
-15. [Local development](#local-development)
-16. [Deployment](#deployment)
-17. [Deprecated / archived code](#deprecated--archived-code)
+6. [Talaria client credentials](#talaria-client-credentials)
+7. [Redis credential lifecycle](#redis-credential-lifecycle)
+8. [Renewal reminders (AgentMail)](#renewal-reminders-agentmail)
+9. [Tech stack](#tech-stack)
+10. [Project structure](#project-structure)
+11. [Database schema (migrations)](#database-schema-migrations)
+12. [Edge Functions (Supabase)](#edge-functions-supabase)
+13. [Next.js API routes](#nextjs-api-routes)
+14. [Environment variables](#environment-variables)
+15. [Security model](#security-model)
+16. [Local development](#local-development)
+17. [Deployment](#deployment)
+18. [Deprecated / archived code](#deprecated--archived-code)
 
 ---
 
@@ -40,13 +42,17 @@ A trader lands on the marketing site, picks a plan, signs in with Clerk, and
 checks out via the embedded Helio widget (crypto-only — USDC on Solana by
 default). Helio fires signed webhooks to a Supabase Edge Function which
 records the subscription, syncs Clerk `publicMetadata` for instant UI
-gating, and provisions a **per-subscriber Redis ACL user** with read-only
-access to the `signals:*` streams.
+gating, and provisions the subscriber's access (Redis ACL user for bot
+stream consumption server-side, and Helio's managed bot handles Discord
+join/role automatically).
 
-The subscriber then opens their portal, reveals their bash-style env-var
-panel (a Stripe-API-key-style reveal-once flow), and copies a
-`REDIS_URL=rediss://...` plus their NTA API key into their bot config. Their
-bot then consumes the live signal stream via `XREADGROUP`.
+The subscriber then opens their portal, reveals their Talaria credentials
+panel (a reveal-once flow), and copies `SUPABASE_URL`,
+`SUPABASE_PUBLISHABLE_KEY`, and their `TALARIA_CLAIM_TOKEN` into the Hermes
+agent Talaria plugin. The token is minted by `/api/talaria-claim`, stored
+only as a SHA-256 hash, and validated live by the `talaria-check` Edge
+Function on every call — the token proves identity; the subscription row
+decides access.
 
 When the subscription expires (Helio `ENDED`), the same webhook revokes the
 Redis ACL user in seconds. A daily cron sweep catches any stragglers.
@@ -63,10 +69,16 @@ emails of its own — Supabase owns the entire reminder cadence).
 Both plans are seeded in `supabase/migrations/0002_seed_plans.sql` and each
 maps 1:1 to a Helio Subscription Pay Link.
 
-| Plan             | Price      | Interval | What you get                                                        | Helio paylink env var            |
-| ---------------- | ---------- | -------- | ------------------------------------------------------------------- | -------------------------------- |
-| **Signal Scout** | $79.00/mo  | MONTH    | Entry-level trade signals + community access                        | `NEXT_PUBLIC_NTA_SIGNALSCOUT`    |
-| **Precision Pro**| $199.00/mo | MONTH    | Premium signals, live alerts, advanced analytics. **Most popular.** | `NEXT_PUBLIC_NTA_PRECISIONPRO`   |
+| Plan             | Price      | Interval | What you get                                                        | Helio paylink source       |
+| ---------------- | ---------- | -------- | ------------------------------------------------------------------- | -------------------------- |
+| **Signal Scout** | $79.00/mo  | MONTH    | Entry-level trade signals + community access                        | `plans.helio_paylink_id`   |
+| **Precision Pro**| $199.00/mo | MONTH    | Premium signals, live alerts, advanced analytics. **Most popular.** | `plans.helio_paylink_id`   |
+
+The Helio paylink id is read from the `plans` table (via `/api/plans` and
+`/api/create-subscription`) — the database is the single source of truth, so
+the checkout always uses the CURRENT paylink. The legacy env-var paylink ids
+(`NEXT_PUBLIC_NTA_SIGNALSCOUT` / `NEXT_PUBLIC_NTA_PRECISIONPRO`) are no
+longer required by the portal.
 
 Each plan has its own:
 - `renewal_reminder_days` (default 3 — start nagging 3 days before expiry)
@@ -256,6 +268,68 @@ payload — that's how we tie Helio events to the local subscription row
 
 ---
 
+## Talaria client credentials
+
+The **Talaria** desktop client (a Hermes agent plugin) connects to the Noble
+Trading signal stream without shipping any Clerk secret or client SDK. The
+portal's **Talaria credentials panel** (`app/components/talaria-credentials-panel.jsx`)
+mints a claim token and presents the connection bundle:
+
+```bash
+SUPABASE_URL=https://pcvscowltlrxzgxjurcr.supabase.co
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+TALARIA_CLAIM_TOKEN=<64-hex, minted once>
+TALARIA_PLAN=<plan_slug>
+TALARIA_EXPIRES_AT=<ISO timestamp>
+```
+
+### Flow
+
+```
+Portal (Clerk web)                          Supabase                       Talaria client (Hermes)
+──────────────────                          ────────                       ────────────────────────
+POST /api/talaria-claim ──▶ mint 32-byte hex token
+                             store ONLY sha256(token) in talaria_claims
+                             revoke user's other live claims
+◀── raw token (shown once) ──
+                            ──▶ user pastes SUPABASE_URL + publishable key + token
+                                 into the plugin's Connect tab
+                                                          ──▶ POST /functions/v1/talaria-check { token }
+                                                              hash → lookup talaria_claims (join plans)
+                                                              re-check LIVE subscriptions row
+                                                              ◀── { plan_slug, sub_status, period_end, ... }
+```
+
+- **The token only proves identity; the live `subscriptions` row decides
+  access.** A lapsed subscription gets `sub_status: expired` and no signal
+  data even with a valid token.
+- Raw tokens are **never stored** — only `sha256(token)` — so a DB leak
+  cannot be used to impersonate a subscriber.
+- **Single-active-token policy** (migration 0006): minting a new token
+  revokes the user's other live claims (partial unique index enforces it at
+  the DB level). The panel's "Mint new token" button re-runs the flow.
+- Tokens expire after 30 days (`CLAIM_TTL_DAYS` in `/api/talaria-claim`).
+- The publishable key is **public** (anon key, RLS-scoped) — it is safe to
+  embed in the distributed plugin; it can never read `talaria_claims`
+  (service-role-only table).
+
+### Precision Pro — plugin download panel
+
+Precision Pro subscribers also see a **Talaria plugin download panel**
+(`app/components/talaria-plugin-download-panel.jsx`) directly below the
+credentials panel. It renders the plugin download URL from
+`NEXT_PUBLIC_TALARIA_PLUGIN` with a Download button + copy button. The panel
+is gated on the plan title containing "precision" and only appears for
+active/grace subscriptions.
+
+> **Bug note (2026-08-08):** minting once failed with
+> `null value in column "plan_id" of relation "talaria_claims"` because the
+> subscription query selected `plans(slug, title)` without `id` — the insert
+> then used `plan_id: subscription.plans.id` (undefined → NULL). Fixed by
+> selecting `plans(id, slug, title)`.
+
+---
+
 ## Redis credential lifecycle
 
 Subscribers run their own trading bots that need **sub-millisecond
@@ -313,28 +387,11 @@ subscriber their own Redis ACL user with strict least-privilege permissions
 7. **Production upgrade path** — if Redis Cloud ACL user limits are hit,
    swap to a WebSocket signal gateway (no Redis exposure to subscribers)
 
-The subscriber's portal panel (`app/components/redis-credentials-panel.jsx`)
-is a bash-style terminal with:
-- macOS traffic-light header + zinc-950 dark mono background
-- Syntax-highlighted env vars (KEY emerald / `=` zinc / VALUE amber)
-- Hidden by default — fetch only happens **after** "Reveal credentials" click
-  (prevents accidental exposure on screen-share)
-- Per-line copy buttons + "Copy all" + "Download .env"
-- "Rotate credentials" button with confirm modal
-- Usage examples (test connection, create consumer group, tail signals)
-
-The exposed env vars are:
-
-```bash
-REDIS_URL=rediss://sub_<hex>:<password>@redis.nobletrading.app:6379
-REDIS_USERNAME=sub_<hex>
-REDIS_PASSWORD=<32-char URL-safe>
-REDIS_STREAM_SIGNALS=signals:signal_scout
-REDIS_CONSUMER_GROUP=nta_<plan_slug>
-NTA_PLAN=signal_scout
-NTA_SUBSCRIPTION_ID=<uuid>
-NTA_API_KEY=nta_<43-char base62>
-```
+> **Portal surface:** the subscriber-facing credentials panel in the portal
+> is now the **Talaria claim-token panel** (see the previous section). The
+> Redis panel (`app/components/redis-credentials-panel.jsx`) is DEPRECATED —
+> the Redis ACL flow still runs server-side for bot stream access, but the
+> portal no longer reveals Redis credentials directly.
 
 ---
 
@@ -403,21 +460,26 @@ nobletradingapp/
 │   │   ├── home.jsx
 │   │   ├── header.jsx
 │   │   ├── footer.jsx                # Sticky footer
-│   │   ├── checkout.jsx              # <HelioCheckout> wrapper
+│   │   ├── checkout.jsx              # <HelioCheckout> wrapper (pending row + additionalJSON)
+│   │   ├── plan-selector.jsx         # Fetches /api/plans + renders CheckoutButton per plan
 │   │   ├── subscription-card.jsx
 │   │   ├── subscription-status-badge.jsx
-│   │   ├── redis-credentials-panel.jsx   # Bash-style env-var reveal panel
+│   │   ├── talaria-credentials-panel.jsx  # Claim-token reveal panel (Hermes Talaria plugin)
+│   │   ├── talaria-plugin-download-panel.jsx  # Precision Pro plugin download URL panel
+│   │   ├── redis-credentials-panel.jsx   # DEPRECATED — see header comment
 │   │   ├── activeuser.jsx
 │   │   ├── markdownrender.jsx
 │   │   ├── logo.jsx
 │   │   ├── waitlist.jsx
 │   │   └── _archive/                 # Deprecated Discord→Plan flow
 │   └── api/
+│       ├── plans/route.js            # GET active plans (helio_paylink_id from DB)
 │       ├── create-charge/route.js    # Mints a one-off Helio charge (legacy)
 │       ├── create-subscription/route.js   # Insert pending sub + Clerk sync
 │       ├── cancel-subscription/route.js   # Mark cancelled + Clerk sync
 │       ├── subscription-status/route.js   # Fresh sub state for portal
-│       ├── redis-credentials/route.js     # GET decrypted creds (reveal-once)
+│       ├── talaria-claim/route.js    # POST mint Talaria claim token
+│       ├── redis-credentials/route.js     # GET decrypted creds (DEPRECATED surface)
 │       ├── redis-credentials/rotate/route.js  # POST rotate (zero-downtime)
 │       ├── clerk/route.js             # Clerk webhook → users table sync
 │       ├── protected/route.js         # Demo of Clerk-protected route
@@ -430,12 +492,14 @@ nobletradingapp/
 │   │   ├── 0002_seed_plans.sql                 # Signal Scout + Precision Pro
 │   │   ├── 0003_add_agentmail_tracking.sql     # message_id + thread_id columns
 │   │   ├── 0004_redis_credentials.sql          # redis_credentials table + plans.slug
-│   │   └── 0005_add_redis_sweep_cron.sql       # pg_cron daily sweep
+│   │   ├── 0005_add_redis_sweep_cron.sql       # pg_cron daily sweep
+│   │   └── 0006_talaria_claims.sql             # talaria_claims + single-active-token index
 │   └── functions/
 │       ├── helio-webhook/index.ts              # Webhook handler (~580 lines)
 │       ├── send-renewal-reminders/index.ts     # AgentMail reminder cron (~392 lines)
 │       ├── redis-credentials-manager/index.ts  # ACL provision/revoke/rotate (~406 lines)
-│       └── sweep-expired-redis-creds/index.ts  # Daily cron safety net (~100 lines)
+│       ├── sweep-expired-redis-creds/index.ts  # Daily cron safety net (~100 lines)
+│       └── talaria-check/index.ts              # Claim-token validation + live sub re-check
 │
 ├── components/ui/                    # shadcn/ui (card, select, chart)
 ├── lib/utils.js                      # cn() helper
@@ -548,6 +612,15 @@ revoked_at IS NULL AND subscriptions.status IN ('expired','cancelled')`.
 `ACL DELUSER` + `UPDATE revoked_at` for each. Auth via either
 `X-Internal-Secret` or `X-Supabase-Cron: true`.
 
+### `talaria-check/index.ts`
+Validates a Talaria client claim token and re-checks the LIVE `subscriptions`
+row on every call. Hashes the presented token (SHA-256), looks it up in
+`talaria_claims` (joined to `plans`), rejects revoked/expired claims, then
+derives `sub_status` from the user's most recent subscription. CORS is
+permissive (`Access-Control-Allow-Origin: *`) because the caller is a desktop
+client (Origin may be null / `hermes://`). No env secrets to set — Supabase
+auto-injects `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`.
+
 ---
 
 ## Admin dashboard widgets
@@ -582,10 +655,12 @@ were archived to `app/admin/_archive/`.
 
 | Route                                            | Method | Purpose                                                       |
 | ------------------------------------------------ | ------ | ------------------------------------------------------------- |
+| `/api/plans`                                     | GET    | Active plans from DB (helio_paylink_id source of truth)       |
 | `/api/create-subscription`                       | POST   | Insert pending subscription + mirror `pending` to Clerk       |
 | `/api/cancel-subscription`                       | POST   | Mark cancelled + mirror `cancelled` to Clerk                  |
 | `/api/subscription-status`                       | GET    | Fresh subscription state for portal                           |
-| `/api/redis-credentials`                         | GET    | Decrypt + return active Redis credentials (reveal-once)       |
+| `/api/talaria-claim`                             | POST   | Mint Talaria claim token (active/grace only)                  |
+| `/api/redis-credentials`                         | GET    | Decrypt + return Redis credentials (DEPRECATED surface)       |
 | `/api/redis-credentials/rotate`                  | POST   | User-initiated zero-downtime rotation                         |
 | `/api/create-charge`                             | POST   | Mint a one-off Helio charge (legacy utility)                  |
 | `/api/clerk`                                     | POST   | Clerk webhook → sync `users` table                            |
@@ -600,15 +675,21 @@ See `.env.example` for the full annotated list. Summary:
 | Service       | Variables                                                                                              | Where              |
 | ------------- | ------------------------------------------------------------------------------------------------------ | ------------------ |
 | Clerk         | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_WEBHOOK_SECRET`                        | next.js            |
-| Supabase      | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`               | next.js + supabase |
-| Helio         | `NEXT_PUBLIC_HELIO_NETWORK`, `NEXT_PUBLIC_NTA_SIGNALSCOUT`, `NEXT_PUBLIC_NTA_PRECISIONPRO`,            | next.js + supabase |
+| Supabase      | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`   | next.js + supabase |
+| Helio         | `NEXT_PUBLIC_HELIO_NETWORK` (optional — paylink ids now come from the DB),                             | next.js + supabase |
 |               | `HELIO_API_KEY`, `HELIO_API_TOKEN`, `HELIO_API_BASE_URL`, `HELIO_WEBHOOK_SHARED_TOKEN`                 | supabase           |
 | AgentMail     | `AGENTMAIL_API_KEY`, `AGENTMAIL_INBOX_ID`, `AGENTMAIL_WEBHOOK_SECRET`,                                 | supabase           |
 |               | `REMINDER_SUCCESS_URL`, `REMINDER_CANCEL_URL`                                                          | supabase           |
 | Redis         | `REDIS_ADMIN_URL` (rediss:// admin), `REDIS_PUBLIC_URL` (subscriber-facing),                           | supabase + next.js |
 |               | `REDIS_CRED_ENCRYPTION_KEY` (base64 32B — same in both envs),                                          | supabase + next.js |
 |               | `INTERNAL_FUNCTION_SECRET` (hex random — same in both envs)                                             | supabase + next.js |
-| Discord       | (optional — only if not using Helio's managed bot)                                                     | —                  |
+| Discord       | `NEXT_PUBLIC_DISCORD_URL` (informational link only — join/roles handled by Helio's bot)                | next.js            |
+| Talaria       | `NEXT_PUBLIC_TALARIA_PLUGIN` (plugin download URL shown to Precision Pro subscribers)                  | next.js            |
+
+> **Talaria plugin vars:** the portal's Talaria panel shows `SUPABASE_URL`
+> and `SUPABASE_PUBLISHABLE_KEY` as copyable/downloadable fixed values for
+> the Hermes agent Talaria plugin — they are the same `NEXT_PUBLIC_SUPABASE_*`
+> values above (publishable/anon key is public; never the service-role key).
 
 Generate secrets with:
 ```bash
@@ -631,6 +712,7 @@ openssl rand -hex 32      # INTERNAL_FUNCTION_SECRET
 | Subscriber writes to / deletes streams       | Strict ACL: `~signals:*` + read commands only; no `XADD`/`XTRIM`/`DEL`/`CONFIG`/`ACL`/`EVAL`        |
 | Stale Redis credentials after missed webhook | Daily sweep cron (`sweep-expired-redis-creds`) at 03:00 UTC                                         |
 | Service role key leak                        | Server-only (no `NEXT_PUBLIC_` prefix); never imported in client components                         |
+| Claim token leak (Talaria)                   | Tokens stored only as SHA-256 hashes; single-active policy; live sub re-check on every call        |
 | Man-in-the-middle on Redis traffic           | TLS only (`rediss://`) for both admin and subscriber URLs                                           |
 
 ---
@@ -719,6 +801,18 @@ Subscribers never see Redis credentials — most secure, but adds latency
 
 ## Deprecated / archived code
 
+### Retired this session (2026-08-08)
+- **Discord OAuth2 flow** — `app/api/discord/authorize` and
+  `app/api/discord/callback` were deleted. Discord join + role assignment is
+  handled entirely by Helio's managed Discord bot at checkout, so the app
+  needs no OAuth. The portal's onboarding checklist shows "Discord access
+  (auto)" — it completes when the subscription activates.
+- **Discord membership-search route** — `app/api/discord/route.js` is
+  marked DEPRECATED (kept for the archived flow only).
+- **Redis credentials panel** — `app/components/redis-credentials-panel.jsx`
+  is DEPRECATED; the portal now surfaces the Talaria claim-token panel.
+
+### Earlier archives (not deleted)
 The original Discord→Plan flow (Discord invite → role check → plan select)
 has been **archived, not deleted**. Files live in `_archive/` folders (which
 Next.js App Router treats as private — not routed):
@@ -731,7 +825,7 @@ Next.js App Router treats as private — not routed):
   `discordno.jsx`, `discordyes.jsx`, `logoDiscord.jsx`, `selectplans.jsx`,
   `checkoutsignalscout.jsx`, `checkoutprecisionpro.jsx`
 
-The new flow uses **Helio's managed Discord Memberships bot** — Helio
+The current flow uses **Helio's managed Discord Memberships bot** — Helio
 handles Discord role assign/remove natively based on subscription state.
 No custom Discord bot is needed.
 

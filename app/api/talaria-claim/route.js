@@ -81,9 +81,11 @@ export async function POST() {
   }
 
   // 3. Most recent subscription that currently entitles access (active/grace)
+  //    NOTE: must select plans.id — the insert below requires plan_id and the
+  //    NOT NULL constraint on talaria_claims.plan_id fails if id is missing.
   const { data: subscription } = await supabase
     .from("subscriptions")
-    .select("id, status, plans(slug, title)")
+    .select("id, status, plans(id, slug, title)")
     .eq("user_id", user.id)
     .in("status", ["active", "grace"])
     .order("created_at", { ascending: false })

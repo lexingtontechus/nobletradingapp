@@ -28,7 +28,8 @@ import { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
 import { SubscriptionCard } from "../components/subscription-card"
 import { SubscriptionStatusBadge } from "../components/subscription-status-badge"
-import { RedisCredentialsPanel } from "../components/redis-credentials-panel"
+import { TalariaCredentialsPanel } from "../components/talaria-credentials-panel"
+import { TalariaPluginDownloadPanel } from "../components/talaria-plugin-download-panel"
 import PlanSelector from "../components/plan-selector"
 
 // -----------------------------------------------------------------------------
@@ -149,6 +150,9 @@ export default function Portal() {
   // Prefer the fresh API value; fall back to the instant Clerk-cached value.
   const effectiveStatus = sub?.status ?? instantStatus ?? null
   const hasActive = !!sub && ["pending", "active", "grace"].includes(sub.status)
+  // Precision Pro gate — for the Talaria plugin download panel
+  const planTitle = (sub?.plans?.title ?? instantPlan ?? "").toLowerCase()
+  const isPrecisionPro = planTitle.includes("precision")
 
   return (
     <div className="min-h-screen bg-base-200">
@@ -221,15 +225,19 @@ export default function Portal() {
           <NoSubscriptionCard onChosePlan={refresh} />
         )}
 
-        {/* Redis credentials panel — shown only for active/grace subs.
+        {/* Talaria credentials panel — shown only for active/grace subs.
             Hidden behind a "Reveal" button so creds aren't visible on screen-share. */}
         {sub && (sub.status === "active" || sub.status === "grace") && (
-          <RedisCredentialsPanel />
+          <>
+            <TalariaCredentialsPanel />
+            {/* Precision Pro only — plugin download link */}
+            {isPrecisionPro && <TalariaPluginDownloadPanel />}
+          </>
         )}
         {sub && (sub.status === "expired" || sub.status === "cancelled") && (
           <div className="alert alert-warning">
             <span>
-              Your Redis credentials have been revoked. Resubscribe to regain
+              Your Talaria access token has been revoked. Resubscribe to regain
               access to the signal stream.
             </span>
           </div>

@@ -1,35 +1,24 @@
 // =============================================================================
-// Noble Trading App — DEPRECATED: Redis Credentials Panel
+// Noble Trading App — Talaria Credentials Panel
 // =============================================================================
-// NO LONGER USED by the portal. The subscriber-facing credentials surface is
-// now the Talaria claim-token panel (app/components/talaria-credentials-panel.jsx),
-// which mints a claim token via /api/talaria-claim for the Hermes agent Talaria
-// plugin. The Redis ACL flow (provision/revoke/rotate via
-// redis-credentials-manager) still runs server-side for bot stream access, but
-// the portal no longer surfaces Redis credentials directly.
+// Bash-like text area that displays the subscriber's Talaria client bundle:
+//   SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, TALARIA_CLAIM_TOKEN, plan, expiry
+// with per-line copy buttons + a "Download .env" button + a "Mint new token"
+// button.
 //
-// Kept only for reference / rollback; delete once the Talaria path is proven.
-// =============================================================================
-
-// Bash-like text area that displays the subscriber's Redis credentials bundle
-// as env vars (REDIS_URL, REDIS_USERNAME, REDIS_PASSWORD, etc.) with copy
-// buttons + a "Download .env" button + a "Rotate credentials" button.
+// The claim token is minted by POST /api/talaria-claim (server-side; requires
+// an active/grace subscription). The token is stored only as a SHA-256 hash in
+// talaria_claims — the raw token is returned exactly once and shown here for
+// the user to paste into the Hermes agent Talaria plugin.
 //
-// SECURITY UX:
-//   - Credentials are HIDDEN by default behind a "Reveal credentials" button.
-//     This prevents accidental exposure on screen-share / video calls.
-//   - The fetch to /api/redis-credentials only happens AFTER the user clicks
+// SECURITY UX (mirrors the retired Redis credentials panel):
+//   - Values are HIDDEN by default behind a "Reveal credentials" button.
+//   - The fetch to /api/talaria-claim only happens AFTER the user clicks
 //     reveal — no sensitive data is in memory until needed.
-//   - Per-line copy buttons + a "Copy all" button.
-//   - The "Rotate credentials" action requires a confirm modal because it
-//     instantly invalidates the old password (any bot using it disconnects).
+//   - "Mint new token" revokes the previous token (single-active-token policy
+//     in migration 0006) — requires a confirm modal.
 //
-// SHOWN WHEN:
-//   - Subscription status is 'active' or 'grace' (parent decides)
-//
-// HIDDEN WHEN:
-//   - Subscription is 'pending' (no creds yet — show a different message)
-//   - Subscription is 'expired' or 'cancelled' (creds revoked)
+// SHOWN WHEN: subscription status is 'active' or 'grace' (parent decides).
 // =============================================================================
 
 "use client"
@@ -42,24 +31,38 @@ import {
   EyeOff,
   Download,
   AlertTriangle,
-  Terminal
+  Terminal,
+  KeyRound
 } from "lucide-react"
 
-export function RedisCredentialsPanel() {
+// -----------------------------------------------------------------------------
+// Fixed vars for the Hermes agent Talaria plugin. The publishable (anon) key
+// is safe to expose client-side — it is NOT a service-role secret.
+// -----------------------------------------------------------------------------
+const SUPABASE_URL =
+  process.env.NEXT_PUBLIC_SUPABASE_URL || "https://pcvscowltlrxzgxjurcr.supabase.co"
+const SUPABASE_PUBLISHABLE_KEY =
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_ANON_KEY ||
+  "sb_publishable_cYfseJa9z0qss0g_Y594wA_lXrWVBsa"
+
+export function TalariaCredentialsPanel() {
   const [revealed, setRevealed] = useState(false)
   const [bundle, setBundle] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [copiedKey, setCopiedKey] = useState(null)
   const [copiedAll, setCopiedAll] = useState(false)
-  const [rotateOpen, setRotateOpen] = useState(false)
-  const [rotating, setRotating] = useState(false)
+  const [mintOpen, setMintOpen] = useState(false)
+  const [minting, setMinting] = useState(false)
 
-  const fetchCreds = useCallback(async () => {
+  const mintToken = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const r = await fetch("/api/redis-credentials", { cache: "no-store" })
+      const r = await fetch("/api/talaria-claim", {
+        method: "POST",
+        cache: "no-store"
+      })
       if (!r.ok) {
         const b = await r.json().catch(() => ({}))
         throw new Error(b.error || `Failed (${r.status})`)
@@ -75,12 +78,11 @@ export function RedisCredentialsPanel() {
 
   function handleReveal() {
     setRevealed(true)
-    if (!bundle) fetchCreds()
+    if (!bundle) mintToken()
   }
 
   function handleHide() {
     setRevealed(false)
-    // Don't clear the bundle — user might re-reveal quickly; avoids re-fetch.
   }
 
   async function copy(text, key) {
@@ -89,7 +91,6 @@ export function RedisCredentialsPanel() {
       setCopiedKey(key)
       setTimeout(() => setCopiedKey(null), 1500)
     } catch {
-      // Fallback for older browsers / insecure contexts
       const ta = document.createElement("textarea")
       ta.value = text
       document.body.appendChild(ta)
@@ -116,29 +117,23 @@ export function RedisCredentialsPanel() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `.env.nta.${bundle.planSlug ?? "subscription"}`
+    a.download = `.env.talaria.${bundle.plan_slug ?? "subscription"}`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
   }
 
-  async function handleRotate() {
-    setRotating(true)
+  async function handleMint() {
+    setMinting(true)
     setError(null)
     try {
-      const r = await fetch("/api/redis-credentials/rotate", { method: "POST" })
-      if (!r.ok) {
-        const b = await r.json().catch(() => ({}))
-        throw new Error(b.error || `Failed (${r.status})`)
-      }
-      setRotateOpen(false)
-      // Refetch to show the new password
-      await fetchCreds()
+      await mintToken()
+      setMintOpen(false)
     } catch (e) {
       setError(e.message)
     } finally {
-      setRotating(false)
+      setMinting(false)
     }
   }
 
@@ -151,11 +146,12 @@ export function RedisCredentialsPanel() {
         <div className="card-body">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <Terminal className="w-5 h-5 text-base-content/60" />
+              <KeyRound className="w-5 h-5 text-base-content/60" />
               <div>
-                <h3 className="font-semibold">Signal stream credentials</h3>
+                <h3 className="font-semibold">Talaria client credentials</h3>
                 <p className="text-sm opacity-60">
-                  Redis credentials for your trading bot. Hidden by default.
+                  Claim token + Supabase connection for the Hermes agent
+                  Talaria plugin. Hidden by default.
                 </p>
               </div>
             </div>
@@ -181,14 +177,13 @@ export function RedisCredentialsPanel() {
       {/* Header bar */}
       <div className="bg-zinc-900 px-4 py-2.5 flex items-center justify-between border-b border-zinc-800">
         <div className="flex items-center gap-2">
-          {/* macOS-style traffic lights for the terminal aesthetic */}
           <div className="flex gap-1.5 mr-2">
             <span className="w-3 h-3 rounded-full bg-red-500/80" />
             <span className="w-3 h-3 rounded-full bg-yellow-500/80" />
             <span className="w-3 h-3 rounded-full bg-green-500/80" />
           </div>
           <span className="text-zinc-300 text-xs font-mono">
-            noble-trading — credentials.env
+            talaria — hermes-plugin.env
           </span>
         </div>
         <div className="flex items-center gap-1">
@@ -228,7 +223,7 @@ export function RedisCredentialsPanel() {
         {loading && (
           <div className="text-zinc-500 flex items-center gap-2">
             <span className="loading loading-spinner loading-sm" />
-            Fetching credentials…
+            Minting claim token…
           </div>
         )}
         {error && (
@@ -237,14 +232,14 @@ export function RedisCredentialsPanel() {
             {error}
             <button
               className="btn btn-xs btn-ghost ml-2 text-zinc-300"
-              onClick={fetchCreds}
+              onClick={mintToken}
             >
               Retry
             </button>
           </div>
         )}
         {bundle && !loading && (
-          <CredentialsLines
+          <TalariaLines
             bundle={bundle}
             copiedKey={copiedKey}
             onCopy={copy}
@@ -252,69 +247,63 @@ export function RedisCredentialsPanel() {
         )}
       </div>
 
-      {/* Footer — rotation + metadata */}
+      {/* Footer — mint + metadata */}
       <div className="bg-zinc-900/50 px-4 py-3 border-t border-zinc-800 flex flex-wrap items-center justify-between gap-3">
         <div className="text-xs text-zinc-500 font-mono">
           {bundle && (
             <>
-              password v{bundle.passwordVersion} · rotated{" "}
-              {new Date(bundle.rotatedAt).toLocaleString()}
+              {bundle.plan_title} · expires{" "}
+              {new Date(bundle.expires_at).toLocaleString()}
             </>
           )}
         </div>
         <div className="flex gap-2">
           <button
             className="btn btn-sm btn-ghost text-zinc-300"
-            onClick={() => setRotateOpen(true)}
-            disabled={!bundle || rotating}
+            onClick={() => setMintOpen(true)}
+            disabled={!bundle || minting}
           >
             <RefreshCw
-              className={`w-4 h-4 ${rotating ? "animate-spin" : ""}`}
+              className={`w-4 h-4 ${minting ? "animate-spin" : ""}`}
             />
-            Rotate credentials
+            Mint new token
           </button>
         </div>
       </div>
 
-      {/* Rotate confirm modal */}
-      {rotateOpen && (
+      {/* Mint confirm modal */}
+      {mintOpen && (
         <div className="modal modal-open">
           <div className="modal-box">
             <h3 className="font-bold text-lg flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-warning" />
-              Rotate credentials?
+              Mint a new token?
             </h3>
             <p className="py-4 text-sm opacity-80">
-              This generates a new password and{" "}
-              <strong>instantly invalidates</strong> the current one. Any bot
-              using the old password will disconnect within seconds. Make sure
-              you can update your bot's config right away.
-            </p>
-            <p className="text-sm opacity-70 pb-2">
-              The rotation is <strong>zero-downtime on the Redis side</strong> —
-              the new password is added before the old one is removed. But your
-              bot won't know the new password until you update it.
+              This revokes your current Talaria token and issues a new one.
+              Any client already connected with the old token will need to be
+              updated with the new value.
             </p>
             <div className="modal-action">
               <button
                 className="btn btn-ghost"
-                onClick={() => setRotateOpen(false)}
-                disabled={rotating}
+                onClick={() => setMintOpen(false)}
+                disabled={minting}
               >
                 Cancel
               </button>
               <button
                 className="btn btn-warning"
-                onClick={handleRotate}
-                disabled={rotating}
+                onClick={handleMint}
+                disabled={minting}
               >
-                {rotating ? "Rotating…" : "Rotate now"}
+                {minting ? "Minting…" : "Mint new token"}
               </button>
             </div>
           </div>
           <div
             className="modal-backdrop"
-            onClick={() => !rotating && setRotateOpen(false)}
+            onClick={() => !minting && setMintOpen(false)}
           />
         </div>
       )}
@@ -323,38 +312,29 @@ export function RedisCredentialsPanel() {
 }
 
 // -----------------------------------------------------------------------------
-// The actual env-var lines, with per-line copy buttons + syntax highlighting
+// The env-var lines, with per-line copy buttons
 // -----------------------------------------------------------------------------
-function CredentialsLines({ bundle, copiedKey, onCopy }) {
+function TalariaLines({ bundle, copiedKey, onCopy }) {
   const lines = [
-    { key: "REDIS_URL", value: bundle.redisUrl },
-    { key: "REDIS_USERNAME", value: bundle.redisUsername },
-    { key: "REDIS_PASSWORD", value: bundle.redisPassword },
-    { key: "REDIS_STREAM_SIGNALS", value: bundle.streamName },
-    { key: "REDIS_CONSUMER_GROUP", value: bundle.consumerGroup },
-    { key: "NTA_PLAN", value: bundle.planSlug ?? bundle.planName },
-    { key: "NTA_SUBSCRIPTION_ID", value: bundle.subscriptionId }
+    { key: "SUPABASE_URL", value: SUPABASE_URL },
+    { key: "SUPABASE_PUBLISHABLE_KEY", value: SUPABASE_PUBLISHABLE_KEY },
+    { key: "TALARIA_CLAIM_TOKEN", value: bundle.token },
+    { key: "TALARIA_PLAN", value: bundle.plan_slug ?? bundle.plan_title },
+    { key: "TALARIA_EXPIRES_AT", value: bundle.expires_at }
   ]
-  if (bundle.apiKey) {
-    lines.push({ key: "NTA_API_KEY", value: bundle.apiKey })
-  }
 
   return (
     <div className="space-y-0.5">
-      {/* Header comment */}
-      <CommentLine text={`# Noble Trading App — Signal Stream Credentials`} />
-      <CommentLine text={`# Plan: ${bundle.planName}`} />
+      <CommentLine text={`# Noble Trading App — Talaria Client Credentials`} />
+      <CommentLine text={`# Plan: ${bundle.plan_title}`} />
       <CommentLine
-        text={`# Generated: ${new Date(
-          bundle.rotatedAt
-        ).toISOString()} (password v${bundle.passwordVersion})`}
+        text={`# Token expires: ${new Date(bundle.expires_at).toISOString()}`}
       />
       <CommentLine
-        text={`# WARNING: keep these secret. Rotate immediately if leaked.`}
+        text={`# WARNING: keep these secret. Mint a new token if leaked.`}
       />
       <div className="h-2" />
 
-      {/* Env var lines */}
       {lines.map(line => (
         <div
           key={line.key}
@@ -379,31 +359,11 @@ function CredentialsLines({ bundle, copiedKey, onCopy }) {
 
       <div className="h-3" />
 
-      {/* Usage examples */}
-      <CommentLine text={`# Test connection:`} />
-      <CommandLine
-        text={`redis-cli -u "$REDIS_URL" XINFO STREAM "$REDIS_STREAM_SIGNALS"`}
-        onCopy={onCopy}
-        copied={copiedKey === "__cmd1__"}
-        copyKey="__cmd1__"
-      />
-      <div className="h-1.5" />
       <CommentLine
-        text={`# Read latest 10 signals (new consumer — auto-creates the group):`}
+        text={`# Paste these into the Hermes agent Talaria plugin Connect tab.`}
       />
-      <CommandLine
-        text={`redis-cli -u "$REDIS_URL" XGROUP CREATE "$REDIS_STREAM_SIGNALS" "$REDIS_CONSUMER_GROUP" $ MKSTREAM`}
-        onCopy={onCopy}
-        copied={copiedKey === "__cmd2__"}
-        copyKey="__cmd2__"
-      />
-      <div className="h-1.5" />
-      <CommentLine text={`# Tail new signals as they arrive:`} />
-      <CommandLine
-        text={`redis-cli -u "$REDIS_URL" XREADGROUP GROUP "$REDIS_CONSUMER_GROUP" worker-1 BLOCK 0 COUNT 10 STREAMS "$REDIS_STREAM_SIGNALS" >`}
-        onCopy={onCopy}
-        copied={copiedKey === "__cmd3__"}
-        copyKey="__cmd3__"
+      <CommentLine
+        text={`# The claim token proves identity; the live subscription decides access.`}
       />
     </div>
   )
@@ -413,45 +373,21 @@ function CommentLine({ text }) {
   return <div className="text-zinc-500 text-xs leading-relaxed">{text}</div>
 }
 
-function CommandLine({ text, onCopy, copied, copyKey }) {
-  return (
-    <div className="group relative flex items-start hover:bg-zinc-900/60 -mx-2 px-2 rounded">
-      <span className="text-sky-300/90 break-all pr-8">$ {text}</span>
-      <button
-        className="absolute right-0 top-0.5 opacity-0 group-hover:opacity-100 transition-opacity btn btn-xs btn-ghost text-zinc-400 hover:text-zinc-100 px-2"
-        onClick={() => onCopy(text, copyKey)}
-        title="Copy command"
-      >
-        {copied ? (
-          <Check className="w-3 h-3 text-green-400" />
-        ) : (
-          <Copy className="w-3 h-3" />
-        )}
-      </button>
-    </div>
-  )
-}
-
 // -----------------------------------------------------------------------------
 // Render the credentials bundle as a .env file (for copy-all + download)
 // -----------------------------------------------------------------------------
 function renderEnvFile(b) {
   const lines = [
-    `# Noble Trading App — Signal Stream Credentials`,
-    `# Plan: ${b.planName}`,
-    `# Generated: ${new Date(b.rotatedAt).toISOString()} (password v${
-      b.passwordVersion
-    })`,
-    `# WARNING: keep these secret. Rotate immediately if leaked.`,
+    `# Noble Trading App — Talaria Client Credentials`,
+    `# Plan: ${b.plan_title}`,
+    `# Token expires: ${new Date(b.expires_at).toISOString()}`,
+    `# WARNING: keep these secret. Mint a new token if leaked.`,
     ``,
-    `REDIS_URL=${b.redisUrl}`,
-    `REDIS_USERNAME=${b.redisUsername}`,
-    `REDIS_PASSWORD=${b.redisPassword}`,
-    `REDIS_STREAM_SIGNALS=${b.streamName}`,
-    `REDIS_CONSUMER_GROUP=${b.consumerGroup}`,
-    `NTA_PLAN=${b.planSlug ?? b.planName}`,
-    `NTA_SUBSCRIPTION_ID=${b.subscriptionId}`
+    `SUPABASE_URL=${SUPABASE_URL}`,
+    `SUPABASE_PUBLISHABLE_KEY=${SUPABASE_PUBLISHABLE_KEY}`,
+    `TALARIA_CLAIM_TOKEN=${b.token}`,
+    `TALARIA_PLAN=${b.plan_slug ?? b.plan_title}`,
+    `TALARIA_EXPIRES_AT=${b.expires_at}`
   ]
-  if (b.apiKey) lines.push(`NTA_API_KEY=${b.apiKey}`)
   return lines.join("\n")
 }
