@@ -87,7 +87,8 @@ export async function GET() {
       next_charge_url, next_charge_token, next_charge_expires_at,
       helio_email, helio_discord_id, helio_discord_username,
       reminder_count, last_reminder_sent_at, cancelled_at, created_at,
-      plans(id, title, description, price_cents, currency, interval)
+      plans(id, title, description, price_cents, currency, interval,
+            helio_paylink_id)
     `
     )
     .eq("user_id", localUser.id)

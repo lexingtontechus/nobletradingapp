@@ -12,7 +12,7 @@ insert into public.plans
    renewal_reminder_days, grace_period_days, is_active, sort_order)
 values
   (
-    '${NEXT_PUBLIC_NTA_SIGNALSCOUT}',   -- e.g. '6571e7cd4a2bee8095ee84da'
+    '6887fd0323a031902fad1edf',   -- Signal Scout Helio paylink (real ID, not a template placeholder)
     'Signal Scout',
     'Entry-level trade signals & community access.',
     7900,                               -- $79.00/mo
@@ -24,7 +24,7 @@ values
     1
   ),
   (
-    '${NEXT_PUBLIC_NTA_PRECISIONPRO}',  -- e.g. '6571e7cd4a2bee1095ee84da'
+    '6888416852cb57fabb54485d',  -- Precision Pro Helio paylink (real ID, not a template placeholder)
     'Precision Pro',
     'Premium signals, live alerts & advanced analytics. Most popular.',
     19900,                              -- $199.00/mo

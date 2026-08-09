@@ -180,7 +180,14 @@ export function SubscriptionCard({ subscription, onStatusChange }) {
           {status === "pending" && (
             <HelioCheckout
               config={{
-                paylinkId: subscription.helio_paylink_id,
+                // Prefer the live plans-table value (source of truth) over the
+                // denormalized subscriptions copy — a pending row created while
+                // plans.helio_paylink_id was a stale placeholder keeps the bad
+                // value in subscriptions.helio_paylink_id even after plans is
+                // fixed (row was snapshotted at creation time).
+                paylinkId:
+                  subscription.plans?.helio_paylink_id ??
+                  subscription.helio_paylink_id,
                 display: "button",
                 network: process.env.NEXT_PUBLIC_HELIO_NETWORK || "test",
                 primaryColor: "#5865f2",

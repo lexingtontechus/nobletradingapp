@@ -57,7 +57,7 @@ export async function POST(req) {
     .select(
       `
       id, status, helio_paylink_id,
-      plans(price_cents, currency, title)
+      plans(price_cents, currency, title, helio_paylink_id)
     `
     )
     .eq("id", subscriptionId)
@@ -87,7 +87,11 @@ export async function POST(req) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        paymentRequestId: sub.helio_paylink_id,
+        // Prefer the live plans-table paylink (source of truth) over the
+        // denormalized subscriptions copy, which can be stale for rows created
+        // before plans.helio_paylink_id was corrected.
+        paymentRequestId:
+          sub.plans?.helio_paylink_id ?? sub.helio_paylink_id,
         requestAmount: amountDecimal,
         successRedirectUrl: successUrl,
         cancelRedirectUrl: process.env.NEXT_PUBLIC_APP_URL ?? "",
