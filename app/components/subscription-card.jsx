@@ -184,6 +184,7 @@ export function SubscriptionCard({ subscription, onStatusChange }) {
                 display: "button",
                 network: process.env.NEXT_PUBLIC_HELIO_NETWORK || "test",
                 primaryColor: "#5865f2",
+                neutralColor: "#e0e3ff",
                 theme: { themeMode: "dark" },
                 customTexts: { mainButtonTitle: ` Complete payment ` },
                 additionalJSON: {
