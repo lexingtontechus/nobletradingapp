@@ -24,7 +24,7 @@
 
 "use client"
 import { useUser } from "@clerk/nextjs"
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import Link from "next/link"
 import { SubscriptionCard } from "../components/subscription-card"
 import { SubscriptionStatusBadge } from "../components/subscription-status-badge"
@@ -79,15 +79,43 @@ export default function Portal() {
     }
   }, [])
 
-  // Initial load + auto-refresh every 15s (lightweight; one endpoint).
-  // Replaces the old 30s user.reload() poll. Future: switch to Supabase
-  // Realtime subscriptions on the subscriptions table for true push.
+  // Flash state: after the user completes payment in the Helio widget, the
+  // webhook flips the row pending→active within seconds. While pending, poll
+  // fast (3s, matching the old selectplans forced refresh) so the portal
+  // confirms the payment without a manual reload. Once active/grace, settle
+  // back to a gentle 15s poll.
+  const [justPaid, setJustPaid] = useState(false)
+  const [showActiveFlash, setShowActiveFlash] = useState(false)
+  const prevStatusRef = useRef(null)
+  const sub = data?.subscription
+  const payments = data?.payments ?? []
+  const events = data?.events ?? []
+  // Prefer the fresh API value; fall back to the instant Clerk-cached value.
+  const effectiveStatus = sub?.status ?? instantStatus ?? null
+  const hasActive = !!sub && ["pending", "active", "grace"].includes(sub.status)
+
+  // Detect pending→active transition → show a success flash once
+  useEffect(() => {
+    const prev = prevStatusRef.current
+    prevStatusRef.current = effectiveStatus
+    if (prev === "pending" && effectiveStatus === "active") {
+      setShowActiveFlash(true)
+      // Auto-dismiss the success flash after 6s
+      const t = setTimeout(() => setShowActiveFlash(false), 6000)
+      return () => clearTimeout(t)
+    }
+  }, [effectiveStatus])
+
+  // Adaptive poll: fast while waiting for webhook confirmation on a pending
+  // row or right after the user paid; gentle otherwise.
+  const pollMs =
+    effectiveStatus === "pending" || justPaid ? 3000 : 15000
   useEffect(() => {
     if (!isSignedIn) return
     refresh()
-    const id = setInterval(refresh, 15000)
+    const id = setInterval(refresh, pollMs)
     return () => clearInterval(id)
-  }, [isSignedIn, refresh])
+  }, [isSignedIn, refresh, pollMs])
 
   if (!isSignedIn) {
     return (
@@ -144,13 +172,6 @@ export default function Portal() {
     )
   }
 
-  const sub = data?.subscription
-  const payments = data?.payments ?? []
-  const events = data?.events ?? []
-  // Prefer the fresh API value; fall back to the instant Clerk-cached value.
-  const effectiveStatus = sub?.status ?? instantStatus ?? null
-  const hasActive = !!sub && ["pending", "active", "grace"].includes(sub.status)
-  // Precision Pro gate — for the Talaria plugin download panel
   const planTitle = (sub?.plans?.title ?? instantPlan ?? "").toLowerCase()
   const isPrecisionPro = planTitle.includes("precision")
 
@@ -193,6 +214,37 @@ export default function Portal() {
           </div>
         )}
 
+        {/* Payment confirmation pending — webhook hasn't flipped the row yet.
+            Auto-refreshes every 3s while pending, so this clears on its own. */}
+        {effectiveStatus === "pending" && (
+          <div className="alert alert-info shadow">
+            <span className="loading loading-spinner loading-sm" />
+            <div>
+              <div className="font-semibold">
+                Payment received — confirming…
+              </div>
+              <div className="text-xs opacity-80">
+                We're waiting for payment confirmation from our provider. Your
+                subscription activates automatically within a minute. This page
+                refreshes by itself — no action needed.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Success flash — shown once when a pending payment confirms */}
+        {showActiveFlash && (
+          <div className="alert alert-success shadow">
+            <span className="text-lg">✓</span>
+            <div>
+              <div className="font-semibold">Payment confirmed!</div>
+              <div className="text-xs opacity-80">
+                Your subscription is now active. Welcome aboard.
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Onboarding checklist (progressive) */}
         <OnboardingChecklist
           accountCreated
@@ -204,7 +256,11 @@ export default function Portal() {
 
         {/* Current subscription (if any) */}
         {hasActive ? (
-          <SubscriptionCard subscription={sub} onStatusChange={refresh} />
+          <SubscriptionCard
+            subscription={sub}
+            onStatusChange={refresh}
+            onPaid={() => setJustPaid(true)}
+          />
         ) : instantStatus === "active" ? (
           // Edge case: Clerk says active but the API fetch hasn't resolved yet —
           // show a minimal card so the user doesn't see "no subscription" flash.

@@ -28,7 +28,7 @@ function formatDate(iso) {
   })
 }
 
-export function SubscriptionCard({ subscription, onStatusChange }) {
+export function SubscriptionCard({ subscription, onStatusChange, onPaid }) {
   const { user } = useUser()
   const [cancelOpen, setCancelOpen] = useState(false)
   const [cancelReason, setCancelReason] = useState("")
@@ -188,7 +188,7 @@ export function SubscriptionCard({ subscription, onStatusChange }) {
                 paylinkId:
                   subscription.plans?.helio_paylink_id ??
                   subscription.helio_paylink_id,
-                display: "button",
+                display: "inline",
                 network: process.env.NEXT_PUBLIC_HELIO_NETWORK || "test",
                 primaryColor: "#5865f2",
                 neutralColor: "#e0e3ff",
@@ -198,7 +198,12 @@ export function SubscriptionCard({ subscription, onStatusChange }) {
                   subscription_id: subscription.id,
                   user_id: user?.id
                 },
-                onSuccess: () => onStatusChange?.(),
+                onSuccess: () => {
+                  // Tell the portal a payment just completed so it switches to
+                  // fast polling (3s) until the webhook confirms the row.
+                  onPaid?.()
+                  onStatusChange?.()
+                },
                 onError: e => console.error(e),
                 onPending: e => console.log(e),
                 onCancel: () => {},
