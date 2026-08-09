@@ -203,6 +203,23 @@ export function SubscriptionCard({ subscription, onStatusChange, onPaid }) {
                   // fast polling (3s) until the webhook confirms the row.
                   onPaid?.()
                   onStatusChange?.()
+                  // Fire the reconciliation IMMEDIATELY — the 15-min cron is
+                  // too slow for the checkout UX. The edge function polls
+                  // Helio's subscription list (which carries user identity)
+                  // and flips the row, so the portal's 3s poll sees it
+                  // within seconds instead of waiting up to 15 minutes.
+                  try {
+                    fetch("/api/helio-sync", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        subscriptionId: subscription.id,
+                        planId: subscription.plans?.id ?? subscription.plan_id,
+                      }),
+                    }).catch(() => {}) // best-effort; cron is the backstop
+                  } catch {
+                    // ignore — fire-and-forget
+                  }
                 },
                 onError: e => console.error(e),
                 onPending: e => console.log(e),

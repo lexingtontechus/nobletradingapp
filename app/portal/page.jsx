@@ -117,6 +117,28 @@ export default function Portal() {
     return () => clearInterval(id)
   }, [isSignedIn, refresh, pollMs])
 
+  // While a payment is pending (webhook not yet confirmed), ALSO re-fire the
+  // Helio reconciliation every 15s. The edge function polls Helio's
+  // subscription list (which carries the buyer's identity) and flips the row,
+  // so the 3s status poll above picks it up within seconds — no 15-min wait.
+  const needsSync = effectiveStatus === "pending" || justPaid
+  useEffect(() => {
+    if (!isSignedIn || !needsSync) return
+    const fireSync = () => {
+      fetch("/api/helio-sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subscriptionId: sub?.id ?? null,
+          planId: sub?.plans?.id ?? null,
+        }),
+      }).catch(() => {}) // best-effort; cron is the ultimate backstop
+    }
+    fireSync()
+    const id = setInterval(fireSync, 15000)
+    return () => clearInterval(id)
+  }, [isSignedIn, needsSync, sub?.id])
+
   if (!isSignedIn) {
     return (
       <div className="min-h-screen flex items-center justify-center">
