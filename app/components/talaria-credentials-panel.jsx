@@ -2,7 +2,7 @@
 // Noble Trading App — Talaria Credentials Panel
 // =============================================================================
 // Bash-like text area that displays the subscriber's Talaria client bundle:
-//   SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, TALARIA_CLAIM_TOKEN, plan, expiry
+//   TALARIA_CLAIM_TOKEN, plan, expiry
 // with per-line copy buttons + a "Download .env" button + a "Mint new token"
 // button.
 //
@@ -10,6 +10,10 @@
 // an active/grace subscription). The token is stored only as a SHA-256 hash in
 // talaria_claims — the raw token is returned exactly once and shown here for
 // the user to paste into the Hermes agent Talaria plugin.
+//
+// The Supabase project URL + public anon key are NOT shown here — the Talaria
+// plugin embeds them as service defaults (the subscriber only enters their
+// claim token).
 //
 // SECURITY UX (mirrors the retired Redis credentials panel):
 //   - Values are HIDDEN by default behind a "Reveal credentials" button.
@@ -36,14 +40,10 @@ import {
 } from "lucide-react"
 
 // -----------------------------------------------------------------------------
-// Fixed vars for the Hermes agent Talaria plugin. The publishable (anon) key
-// is safe to expose client-side — it is NOT a service-role secret.
+// The Supabase project URL + public anon key are embedded service defaults in
+// the Talaria plugin (DEFAULT_SUPABASE_URL / DEFAULT_ANON_KEY) — the portal
+// never shows or ships them. Only the claim token + plan metadata are shown.
 // -----------------------------------------------------------------------------
-const SUPABASE_URL =
-  process.env.NEXT_PUBLIC_SUPABASE_URL || "https://pcvscowltlrxzgxjurcr.supabase.co"
-const SUPABASE_PUBLISHABLE_KEY =
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_ANON_KEY ||
-  "sb_publishable_cYfseJa9z0qss0g_Y594wA_lXrWVBsa"
 
 export function TalariaCredentialsPanel() {
   const [revealed, setRevealed] = useState(false)
@@ -150,8 +150,8 @@ export function TalariaCredentialsPanel() {
               <div>
                 <h3 className="font-semibold">Talaria client credentials</h3>
                 <p className="text-sm opacity-60">
-                  Claim token + Supabase connection for the Hermes agent
-                  Talaria plugin. Hidden by default.
+                  Claim token for the Hermes agent Talaria plugin. Hidden by
+                  default.
                 </p>
               </div>
             </div>
@@ -316,8 +316,6 @@ export function TalariaCredentialsPanel() {
 // -----------------------------------------------------------------------------
 function TalariaLines({ bundle, copiedKey, onCopy }) {
   const lines = [
-    { key: "SUPABASE_URL", value: SUPABASE_URL },
-    { key: "SUPABASE_PUBLISHABLE_KEY", value: SUPABASE_PUBLISHABLE_KEY },
     { key: "TALARIA_CLAIM_TOKEN", value: bundle.token },
     { key: "TALARIA_PLAN", value: bundle.plan_slug ?? bundle.plan_title },
     { key: "TALARIA_EXPIRES_AT", value: bundle.expires_at }
@@ -360,7 +358,7 @@ function TalariaLines({ bundle, copiedKey, onCopy }) {
       <div className="h-3" />
 
       <CommentLine
-        text={`# Paste these into the Hermes agent Talaria plugin Connect tab.`}
+        text={`# Paste this token into the Hermes agent Talaria plugin Connect tab.`}
       />
       <CommentLine
         text={`# The claim token proves identity; the live subscription decides access.`}
@@ -383,8 +381,6 @@ function renderEnvFile(b) {
     `# Token expires: ${new Date(b.expires_at).toISOString()}`,
     `# WARNING: keep these secret. Mint a new token if leaked.`,
     ``,
-    `SUPABASE_URL=${SUPABASE_URL}`,
-    `SUPABASE_PUBLISHABLE_KEY=${SUPABASE_PUBLISHABLE_KEY}`,
     `TALARIA_CLAIM_TOKEN=${b.token}`,
     `TALARIA_PLAN=${b.plan_slug ?? b.plan_title}`,
     `TALARIA_EXPIRES_AT=${b.expires_at}`

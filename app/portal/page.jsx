@@ -185,7 +185,7 @@ export default function Portal() {
                 {user?.firstName ?? "Trader"}
               </span>
             </h1>
-            <p className="opacity-60">
+            <p className="opacity-60 lowercase">
               {user?.primaryEmailAddress?.emailAddress}
             </p>
           </div>
