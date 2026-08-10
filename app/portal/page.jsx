@@ -63,7 +63,26 @@ export default function Portal() {
   const pm = user?.publicMetadata ?? {}
   const instantStatus = pm.subscriptionStatus ?? null
   const instantPlan = pm.plan ?? null
-  const isAdmin = pm.role === "admin"
+  // Role is NOT in publicMetadata (null by design) — it lives in Clerk
+  // privateMetadata, which the browser SDK can't read. The server endpoints
+  // below resolve it: subscription-status returns users.role (Supabase,
+  // written from private metadata), and /api/me returns it directly.
+  const instantAdmin = pm.role === "admin"
+  const [serverRole, setServerRole] = useState(null)
+  useEffect(() => {
+    if (!isSignedIn) return
+    let cancelled = false
+    fetch("/api/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled) setServerRole(d?.role ?? null)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [isSignedIn])
+  const isAdmin = serverRole === "admin" || instantAdmin
 
   const refresh = useCallback(async () => {
     setError(null)

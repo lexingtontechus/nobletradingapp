@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
+  SignUpFuture,
   SignInButton,
   UserButton,
   useUser,
@@ -80,6 +82,23 @@ export default function Header() {
   const { has, isLoaded } = useAuth();
   const { user } = useUser();
 
+  // Role lives in Clerk PRIVATE metadata (public metadata is null by design),
+  // which the browser SDK cannot read — fetch it from the server endpoint.
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    if (!isLoaded) return;
+    fetch("/api/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled) setIsAdmin(d?.role === "admin");
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoaded]);
+
   //  if (!isLoaded) {
   //    return <span></span>;
   //  }
@@ -96,8 +115,8 @@ export default function Header() {
         </Link>
       </div>
       <div className=" flex-none uppercase ml-2 px-2">
-        <Show when="signed-out" forceRedirectUrl="/portal">
-          <SignInButton forceRedirectUrl="/portal">
+        <Show when="signed-out">
+          <SignInButton forceRedirectUrl="/portal" signinforceredirecturl="/portal" fallbackRedirectUrl="/portal" oauthFlow="popup">
             <div className="btn btn-secondary rounded-full font-bold uppercase">
               Members
             </div>
@@ -108,7 +127,7 @@ export default function Header() {
           <UserButton>
             {/* user?.publicMetadata.role == "admin" &&) */}
             <UserButton.MenuItems>
-              {user?.publicMetadata.role == "admin" && (
+              {isAdmin && (
                 <UserButton.Link
                   label="Admin"
                   labelIcon={<IconAdmin />}

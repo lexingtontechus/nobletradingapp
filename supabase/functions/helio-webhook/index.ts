@@ -73,7 +73,17 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const SHARED_TOKEN = Deno.env.get("HELIO_WEBHOOK_SHARED_TOKEN")!;
+// Helio generates a UNIQUE sharedToken per webhook registration. Each paylink
+// has its own subscription webhook (Helio's subscription webhook API requires
+// paylinkId — there is no global subscription webhook), so the function must
+// accept MULTIPLE tokens. Set HELIO_WEBHOOK_SHARED_TOKEN to a comma-separated
+// list, one per registered webhook. Every delivery is verified against the
+// full list (Bearer + HMAC), so a paylink's events are only accepted if a
+// matching webhook token exists.
+const SHARED_TOKENS = (Deno.env.get("HELIO_WEBHOOK_SHARED_TOKEN") ?? "")
+  .split(",")
+  .map((t: string) => t.trim())
+  .filter(Boolean);
 const HELIO_API_KEY = Deno.env.get("HELIO_API_KEY")!;
 const HELIO_API_TOKEN = Deno.env.get("HELIO_API_TOKEN")!;
 const HELIO_API_BASE = Deno.env.get("HELIO_API_BASE_URL") ?? "https://api.hel.io";
@@ -294,15 +304,26 @@ Deno.serve(async (req: Request) => {
   // 1. Read raw body BEFORE any JSON parsing (signature is over raw bytes)
   const rawBody = await req.text();
 
-  // 2. Verify Bearer token
+  // 2. Verify Bearer token (against any registered webhook sharedToken)
   const authHeader = req.headers.get("authorization") ?? "";
-  if (authHeader !== `Bearer ${SHARED_TOKEN}`) {
+  const bearerToken = authHeader.startsWith("Bearer ")
+    ? authHeader.slice("Bearer ".length).trim()
+    : "";
+  if (!SHARED_TOKENS.includes(bearerToken)) {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  // 3. Verify HMAC signature
+  // 3. Verify HMAC signature — try each registered token; the matching one
+  //    (the token for the webhook that fired this delivery) will validate.
   const signature = req.headers.get("x-signature") ?? "";
-  if (!signature || !(await verifySignature(rawBody, signature, SHARED_TOKEN))) {
+  let signatureOk = false;
+  for (const token of SHARED_TOKENS) {
+    if (await verifySignature(rawBody, signature, token)) {
+      signatureOk = true;
+      break;
+    }
+  }
+  if (!signatureOk) {
     return new Response("Invalid signature", { status: 401 });
   }
 

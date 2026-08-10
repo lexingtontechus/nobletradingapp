@@ -17,7 +17,7 @@ import { HelioCheckout } from "@heliofi/checkout-react";
 const helioConfig = {
   paylinkId:  process.env.NEXT_PUBLIC_NTA_PRECISIONPRO,// ||  "6888416852cb57fabb54485d",
   display: "button",
-  network: process.env.HELIO_NETWORK || "test", //not required for production
+  network: process.env.NEXT_PUBLIC_HELIO_NETWORK || "test", //not required for production
   primaryColor: "#5865f2", //"#fede1c",
   neutralColor: "#e0e3ff",
   textColor: "#242424",

@@ -68,12 +68,12 @@ export default function CheckoutButton({ plan }) {
   const helioConfig = {
     paylinkId,
     display: "button",
-    network: process.env.HELIO_NETWORK || "test",
+    network: process.env.NEXT_PUBLIC_HELIO_NETWORK || "test",
     primaryColor: "#5865f2",
     neutralColor: "#e0e3ff",
     textColor: "#242424",
     theme: { themeMode: "dark" },
-    customTexts: { mainButtonTitle: ` Pay for ${plan.title} ` },
+    customTexts: { mainButtonTitle: `Pay for ${plan.title}` },
     // CRITICAL: this round-trips into the Helio webhook payload, letting the
     // Supabase Edge Function update the correct subscriptions row.
     additionalJSON: {

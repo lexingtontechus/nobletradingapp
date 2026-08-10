@@ -43,3 +43,6 @@ next-env.d.ts
 # Python
 __pycache__/
 *.pyc
+
+# supabase cli temp
+supabase/.temp/

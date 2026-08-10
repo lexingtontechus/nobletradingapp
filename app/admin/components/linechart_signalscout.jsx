@@ -32,19 +32,32 @@ const chartConfig = {
 };
 
 export function LineChartSignalScout({ data }) {
-  const chartData = (data ?? []).map((item) => {
+  // Build a full Jan→Dec series for the current year so a single month with
+  // data renders as a visible peak (an AreaChart with ONE point draws nothing).
+  // Keep cents (2dp) — Math.round to whole dollars turns $0.15 into 0.
+  const currentYear = new Date().getFullYear();
+  const chartData = Array.from({ length: 12 }, (_, i) => {
+    const m = `${currentYear}-${String(i + 1).padStart(2, "0")}`;
+    const item =
+      (data ?? []).find((r) => String(r.month ?? "").slice(0, 7) === m) ?? {};
     const total = (item.new_subscriptions ?? 0) + (item.renewals ?? 0);
     const revenue = (item.revenue_cents ?? 0) / 100;
     return {
-      date: String(item.month ?? "").slice(0, 7), // YYYY-MM
+      date: m,
       new_subscriptions: total
-        ? Math.round(revenue * (item.new_subscriptions / total))
+        ? Math.round(revenue * (item.new_subscriptions / total) * 100) / 100
         : 0,
       renewals: total
-        ? Math.round(revenue * (item.renewals / total))
+        ? Math.round(revenue * (item.renewals / total) * 100) / 100
         : 0,
     };
   });
+
+  const fmtUsd = (v) =>
+    `$${Number(v).toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
 
   const totalRevenue = (data ?? []).reduce(
     (sum, item) => sum + (item.revenue_cents ?? 0) / 100,
@@ -66,7 +79,7 @@ export function LineChartSignalScout({ data }) {
           <CardTitle>Signal Scout — Year-To-Date Revenue</CardTitle>
           <CardDescription>
             {totalNew} new · {totalRenewals} renewals · total{" "}
-            ${totalRevenue.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+            {fmtUsd(totalRevenue)}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -91,14 +104,7 @@ export function LineChartSignalScout({ data }) {
                 tickLine={false}
                 axisLine={false}
                 tickMargin={8}
-                tickFormatter={(value) =>
-                  value.toLocaleString("en-US", {
-                    style: "currency",
-                    currency: "USD",
-                    currencyDisplay: "symbol",
-                    maximumFractionDigits: 0,
-                  })
-                }
+                tickFormatter={(value) => fmtUsd(value)}
               />
               <ChartTooltip
                 className="bg-base-300"
@@ -113,7 +119,7 @@ export function LineChartSignalScout({ data }) {
                           style={{ "--color-bg": `var(--color-${name})` }}
                         />
                         <div className="text-foreground ml-auto flex items-baseline gap-0.5 font-mono font-medium tabular-nums">
-                          ${value}
+                          {fmtUsd(value)}
                         </div>
                         {chartConfig[name]?.label || name}
                       </>

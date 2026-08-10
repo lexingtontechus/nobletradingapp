@@ -17,7 +17,6 @@ import WidgetPaymentsPrecisionProChart from "./widget_payments_precisionpro_char
 
 //Tab - Customers
 import WidgetCustomersChart from "./widget_customers_chart";
-//import WidgetCustomersDetails from "./widget_customers_details";
 
 export default async function Admin() {
   // await auth.protect();

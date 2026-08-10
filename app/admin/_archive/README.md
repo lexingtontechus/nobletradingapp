@@ -10,6 +10,8 @@ widgets with the new Supabase schema from migrations 0001–0005).
 | `widget_customers_details.jsx` | Queried `widget_customers_details` table (does not exist in new schema). Import was already commented out in `page.jsx`. Not replaced — the detail view can be rebuilt later against `v_active_subscriptions` if needed. |
 | `_ntawidget.jsx` | Queried `vwidget_customers` view (does not exist in new schema). Underscore prefix = private/dead. Not imported anywhere. |
 | `components/realtime-chart.jsx` | Client component that polled `/api/nta/nta-data` (a mock random-data endpoint). Not imported anywhere. The new admin dashboard uses real Supabase data via server components instead of client-side polling. |
+| `_widget.jsx` | Broken legacy fragment referencing `/api/nta-data` (no such route). Not imported anywhere. |
+| `components/example2.jsx` | shadcn area-chart demo with hardcoded mock data. Not imported anywhere. |
 
 ## How to roll back
 

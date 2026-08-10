@@ -188,12 +188,12 @@ export function SubscriptionCard({ subscription, onStatusChange, onPaid }) {
                 paylinkId:
                   subscription.plans?.helio_paylink_id ??
                   subscription.helio_paylink_id,
-                display: "inline",
+                display: "button",
                 network: process.env.NEXT_PUBLIC_HELIO_NETWORK || "test",
                 primaryColor: "#5865f2",
                 neutralColor: "#e0e3ff",
                 theme: { themeMode: "dark" },
-                customTexts: { mainButtonTitle: ` Complete payment ` },
+                customTexts: { mainButtonTitle: "Complete payment" },
                 additionalJSON: {
                   subscription_id: subscription.id,
                   user_id: user?.id

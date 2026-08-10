@@ -87,8 +87,8 @@ export default async function WidgetPaymentsSummary() {
               </div>
               <div className="stat-value text-emerald-700">
                 ${(item.revenue_cents / 100).toLocaleString("en-US", {
-                  minimumFractionDigits: 0,
-                  maximumFractionDigits: 0,
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
                 })}
               </div>
               <div className="stat-desc capitalize">

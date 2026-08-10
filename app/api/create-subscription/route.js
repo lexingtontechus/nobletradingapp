@@ -69,7 +69,11 @@ export async function POST(req) {
       email,
       discord_id: user.publicMetadata?.discordId ?? null,
       discord_username: user.publicMetadata?.discordUsername ?? null,
-      role: user.publicMetadata?.role === "admin" ? "admin" : "member"
+      role:
+        user.publicMetadata?.role === "admin" ||
+        user.privateMetadata?.role === "admin"
+          ? "admin"
+          : "member"
     },
     { onConflict: "clerk_user_id" }
   )

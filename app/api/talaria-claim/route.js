@@ -68,7 +68,11 @@ export async function POST() {
       {
         clerk_user_id: userId,
         email,
-        role: u.publicMetadata?.role === "admin" ? "admin" : "member"
+        role:
+          u.publicMetadata?.role === "admin" ||
+          u.privateMetadata?.role === "admin"
+            ? "admin"
+            : "member"
       },
       { onConflict: "clerk_user_id" }
     )

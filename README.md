@@ -743,7 +743,7 @@ supabase secrets set \
   HELIO_API_KEY=... \
   HELIO_API_TOKEN=... \
   HELIO_API_BASE_URL=https://api.dev.hel.io \
-  HELIO_WEBHOOK_SHARED_TOKEN=... \
+  HELIO_WEBHOOK_SHARED_TOKEN=token1,token2 \
   AGENTMAIL_API_KEY=am_... \
   AGENTMAIL_INBOX_ID=reminders@nobletrading.agentmail.to \
   REMINDER_SUCCESS_URL=http://localhost:3000/portal \

@@ -64,15 +64,37 @@ function aggregateByMonth(rows) {
 export function LineChartPayments({ data }) {
   const aggregated = aggregateByMonth(data ?? []);
 
-  const chartData = aggregated.map((item) => ({
-    date: item.month, // YYYY-MM
-    new_subscriptions: item.new_subscriptions
-      ? Math.round(item.revenue_cents * (item.new_subscriptions / (item.new_subscriptions + item.renewals)) / 100)
-      : 0,
-    renewals: item.renewals
-      ? Math.round(item.revenue_cents * (item.renewals / (item.new_subscriptions + item.renewals)) / 100)
-      : 0,
-  }));
+  // Keep cents (2dp) — Math.round to whole dollars turns $0.15 into 0 and the
+  // chart renders blank. Also fill the full Jan→Dec series so a single month
+  // with data draws a visible peak (an AreaChart with ONE point draws nothing).
+  const currentYear = new Date().getFullYear();
+  const byMonth = new Map(aggregated.map((a) => [a.month, a]));
+  const chartData = Array.from({ length: 12 }, (_, i) => {
+    const m = `${currentYear}-${String(i + 1).padStart(2, "0")}`;
+    const item = byMonth.get(m) ?? {
+      new_subscriptions: 0,
+      renewals: 0,
+      revenue_cents: 0,
+      payment_count: 0,
+    };
+    const total = item.new_subscriptions + item.renewals;
+    const revenue = item.revenue_cents / 100;
+    return {
+      date: m, // YYYY-MM
+      new_subscriptions: total
+        ? Math.round(revenue * (item.new_subscriptions / total) * 100) / 100
+        : 0,
+      renewals: total
+        ? Math.round(revenue * (item.renewals / total) * 100) / 100
+        : 0,
+    };
+  });
+
+  const fmtUsd = (v) =>
+    `$${Number(v).toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
 
   const totalRevenue = aggregated.reduce(
     (sum, item) => sum + item.revenue_cents / 100,
@@ -94,7 +116,7 @@ export function LineChartPayments({ data }) {
           <CardTitle>Year-To-Date Revenue</CardTitle>
           <CardDescription>
             Aggregated monthly revenue — {totalNew} new · {totalRenewals} renewals ·
-            total ${totalRevenue.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+            total {fmtUsd(totalRevenue)}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -119,14 +141,7 @@ export function LineChartPayments({ data }) {
                 tickLine={false}
                 axisLine={false}
                 tickMargin={8}
-                tickFormatter={(value) =>
-                  value.toLocaleString("en-US", {
-                    style: "currency",
-                    currency: "USD",
-                    currencyDisplay: "symbol",
-                    maximumFractionDigits: 0,
-                  })
-                }
+                tickFormatter={(value) => fmtUsd(value)}
               />
               <ChartTooltip
                 className="bg-base-300"
@@ -141,7 +156,7 @@ export function LineChartPayments({ data }) {
                           style={{ "--color-bg": `var(--color-${name})` }}
                         />
                         <div className="text-foreground ml-auto flex items-baseline gap-0.5 font-mono font-medium tabular-nums">
-                          ${value}
+                          {fmtUsd(value)}
                         </div>
                         {chartConfig[name]?.label || name}
                       </>
