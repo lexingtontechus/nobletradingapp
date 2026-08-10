@@ -46,6 +46,51 @@ export default function Home() {
         </p>
       </section>
 
+      {/* Why the name — link to the Talaria page */}
+      <section className="mx-auto max-w-5xl px-4 pb-16">
+        <div className="card bg-base-100 border border-primary/30">
+          <div className="card-body items-center text-center">
+            <svg
+              viewBox="0 0 100 100"
+              width="56"
+              height="56"
+              role="img"
+              aria-label="Talaria mark"
+              className="opacity-90"
+            >
+              <circle
+                cx="24"
+                cy="76"
+                r="7"
+                fill="none"
+                stroke="#D9A857"
+                strokeWidth="3"
+              />
+              <path
+                d="M27 71 L40 55 L38 68 L52 46 L48 62 L64 38 L58 56 L78 24 L66 50 L84 12"
+                fill="none"
+                stroke="#D9A857"
+                strokeWidth="4.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <h2 className="card-title text-2xl">Why &quot;Talaria&quot;?</h2>
+            <p className="max-w-2xl opacity-80">
+              In Greek myth, the talaria were the winged sandals that carried
+              Hermes between the realms of gods and mortals — the fastest thing
+              that moved. In Noble Trader, Talaria is the layer built for
+              speed: the signal stream and execution path that carries the
+              engine&apos;s read to your fills — and to you — without another
+              screen in the way.
+            </p>
+            <Link href="/talaria" className="btn btn-primary btn-lg mt-4">
+              Learn more about Talaria
+            </Link>
+          </div>
+        </div>
+      </section>
+
       {/* Feature highlights */}
       <section className="mx-auto max-w-5xl px-4 pb-16">
         <div className="grid gap-6 md:grid-cols-3">

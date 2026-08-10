@@ -6,16 +6,24 @@ import { Analytics } from "@vercel/analytics/next";
 import { dark } from "@clerk/themes";
 import "./globals.css";
 import Logo from "./components/logo";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Cormorant_SC, IBM_Plex_Mono, Public_Sans } from "next/font/google";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const publicSans = Public_Sans({
+  variable: "--font-public-sans",
   subsets: ["latin"],
+  weight: ["400", "500", "600"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const cormorantSc = Cormorant_SC({
+  variable: "--font-cormorant-sc",
   subsets: ["latin"],
+  weight: ["500", "600", "700"],
+});
+
+const ibmPlexMono = IBM_Plex_Mono({
+  variable: "--font-ibm-plex-mono",
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
 });
 
 export const metadata = {
@@ -42,7 +50,7 @@ export default function RootLayout({ children }) {
     >
       <html lang="en">
         <body
-          className={`${geistSans.variable} ${geistMono.variable} capitalize antialiased`}
+          className={`${publicSans.variable} ${cormorantSc.variable} ${ibmPlexMono.variable} capitalize antialiased`}
         >
           <Header />
           {children}

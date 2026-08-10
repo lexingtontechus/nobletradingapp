@@ -79,7 +79,7 @@ export default async function WidgetPaymentsSummary() {
         <div className="stats shadow bg-base-200 border-base-100">
           {summary.map((item, id) => (
             <div key={id} className="stat place-items-center">
-              <div className="stat-figure text-info badge badge-accent">
+              <div className="stat-figure text-accent-content font-bold badge badge-accent">
                 {item.count}
               </div>
               <div className="stat-title font-bold text-secondary">

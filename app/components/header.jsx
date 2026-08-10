@@ -109,15 +109,20 @@ export default function Header() {
   return (
     <div className="navbar bg-base-100 shadow-sm">
       <div className="flex-1">
-        <Logo size={36} padding={0} />
-        <Link href="/" className="btn btn-ghost text-xl uppercase px-2">
-          Noble Trading App
+        <Link
+          href="/"
+          className="inline-flex items-center gap-2 px-2 uppercase no-underline"
+        >
+          <Logo size={36} padding={0} />
+          <span className="text-xl font-bold tracking-wide text-base-content">
+            Noble Trading App
+          </span>
         </Link>
       </div>
-      <div className=" flex-none uppercase ml-2 px-2">
+      <div className=" flex-none ml-2 px-2">
         <Show when="signed-out">
           <SignInButton forceRedirectUrl="/portal" signinforceredirecturl="/portal" fallbackRedirectUrl="/portal" oauthFlow="popup">
-            <div className="btn btn-secondary rounded-full font-bold uppercase">
+            <div className="btn btn-secondary rounded-full font-bold">
               Members
             </div>
           </SignInButton>
