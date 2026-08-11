@@ -313,6 +313,24 @@ POST /api/talaria-claim ──▶ mint 32-byte hex token
   embed in the distributed plugin; it can never read `talaria_claims`
   (service-role-only table).
 
+### Admin testing — mint claims for different plans
+
+For admin/testing use (NOT the production flow), a self-contained SQL script
+creates test users + ACTIVE subscriptions + claim tokens per plan so the
+Talaria plugin can be tested end-to-end against each plan:
+
+```bash
+supabase/scripts/admin_mint_test_claims.sql
+```
+
+Run it in the Supabase SQL editor (postgres role — bypasses the RLS that
+locks `talaria_claims` to service-role-only). It upserts one test user per
+plan (fixed UUIDs → idempotent), replaces their subscriptions with an ACTIVE
+row, revokes prior live claims, mints `test-<plan_slug>-<32hex>` tokens
+(stores only `sha256`), and returns the raw tokens to paste into the plugin's
+Connect tab. Guards fail fast on a bad plan slug or an email already used by
+a real user.
+
 ### Precision Pro — plugin download panel
 
 Precision Pro subscribers also see a **Talaria plugin download panel**

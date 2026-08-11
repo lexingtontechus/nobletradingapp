@@ -1,0 +1,22 @@
+{
+  "source": "saved",
+  "recipe": {
+    "name": "nobletradingapp (Next.js app)",
+    "kind": "nextjs",
+    "bootstrap": [
+      "npm install"
+    ],
+    "build": [
+      "npm run build"
+    ],
+    "test": [
+      "npm run lint"
+    ],
+    "start": null,
+    "port": 0,
+    "readinessPath": null,
+    "evidence": [
+      "Saved manifest (2026-08-11): Next 16 removed the built-in `next lint`; the lint script now runs ESLint directly via eslint.config.mjs (flat config with a legacy-baseline policy). start: null — the auto-detected recipe's `next start` + readiness probe hangs on this Windows host (verified twice 2026-08-11: server binds :3000, probe never completes, process orphans). Skipping readiness is the established pattern for this workspace family."
+    ]
+  }
+}
