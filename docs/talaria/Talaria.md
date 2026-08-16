@@ -6,7 +6,7 @@
 
 ## 01 · Mark & Concept
 
-![](http://asset.localhost/C%3A%5CUsers%5Caloys%5COneDrive%5CDocuments%5CNoble%20Trader%20Agent%5Cassets%5Ctalaria-mark.svg)
+![](talaria-mark.svg)
 
 In Greek myth, the **talaria** were the winged sandals that carried Hermes between the realms of gods and mortals — the fastest thing that moved. As a plugin name for a trading agent already built around Hermes, it maps directly: **Talaria is the layer that makes execution fast** — order routing, latency-sensitive fills, the last mile between a signal and a filled position.
 
