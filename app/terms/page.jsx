@@ -277,11 +277,7 @@ export default function Terms() {
             subscriptions that are canceled mid-month. To prevent being charged
             on the next billing period, cancel the membership subscription. Upon
             cancellation, your membership will remain in effect until the end of
-            the billing cycle. We provide a comprehensive 7-day trial completely
-            free of charge, with no obligation or requirement for billing
-            information. We believe this empowers potential subscribers to fully
-            experience our service and make an informed decision about
-            subscribing.
+            the billing cycle.
           </div>
         </div>
       </div>

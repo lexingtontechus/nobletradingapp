@@ -3,6 +3,7 @@ export default function Footer() {
   return (
     <footer className="footer sm:footer-horizontal footer-center p-4">
       <nav className="mx-auto grid grid-flow-col gap-4">
+        <Link href="/disclaimer">Disclaimer</Link>
         <Link href="/terms">Terms</Link>
         <Link href="/privacy">Privacy</Link>
       </nav>
