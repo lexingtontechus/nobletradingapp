@@ -89,7 +89,7 @@ export async function POST() {
   //    NOT NULL constraint on talaria_claims.plan_id fails if id is missing.
   const { data: subscription } = await supabase
     .from("subscriptions")
-    .select("id, status, plans(id, slug, title)")
+    .select("id, status, plan_id, plans(id, slug, title)")
     .eq("user_id", user.id)
     .in("status", ["active", "grace"])
     .order("created_at", { ascending: false })
@@ -126,7 +126,7 @@ export async function POST() {
     .insert({
       token_hash: tokenHash,
       user_id: user.id,
-      plan_id: subscription.plans.id,
+      plan_id: subscription.plan_id,
       expires_at: expiresAt
     })
 

@@ -64,25 +64,23 @@ export default function Portal() {
   const instantStatus = pm.subscriptionStatus ?? null
   const instantPlan = pm.plan ?? null
   // Role is NOT in publicMetadata (null by design) — it lives in Clerk
-  // privateMetadata, which the browser SDK can't read. The server endpoints
-  // below resolve it: subscription-status returns users.role (Supabase,
-  // written from private metadata), and /api/me returns it directly.
-  const instantAdmin = pm.role === "admin"
-  const [serverRole, setServerRole] = useState(null)
+  // privateMetadata, which the browser SDK can't read. The server endpoint
+  // /api/me resolves it (returns { role: "admin" | "member" | null }).
+  const [serverRole, setServerRole] = useState(null);
   useEffect(() => {
-    if (!isSignedIn) return
-    let cancelled = false
+    if (!isSignedIn) return;
+    let cancelled = false;
     fetch("/api/me")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (!cancelled) setServerRole(d?.role ?? null)
+        if (!cancelled) setServerRole(d?.role ?? null);
       })
-      .catch(() => {})
+      .catch(() => {});
     return () => {
-      cancelled = true
-    }
-  }, [isSignedIn])
-  const isAdmin = serverRole === "admin" || instantAdmin
+      cancelled = true;
+    };
+  }, [isSignedIn]);
+  const isAdmin = serverRole === "admin";
 
   const refresh = useCallback(async () => {
     setError(null)
@@ -181,7 +179,7 @@ export default function Portal() {
           <div>
             <h1 className="text-3xl font-bold">
               Welcome back,{" "}
-              <span className="text-primary">
+              <span className="text-primary capitalize">
                 {user?.firstName ?? "Trader"}
               </span>
             </h1>
@@ -214,13 +212,13 @@ export default function Portal() {
   }
 
   const planTitle = (sub?.plans?.title ?? instantPlan ?? "").toLowerCase()
-  const isPrecisionPro = planTitle.includes("precision")
+  //const isPrecisionPro = planTitle.includes("precision")
 
   return (
     <div className="min-h-screen bg-base-200">
       <div className="mx-auto max-w-4xl px-4 py-10 space-y-6">
         {/* Header */}
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold">
               Welcome back,{" "}
@@ -236,14 +234,13 @@ export default function Portal() {
           {effectiveStatus && (!sub || sub.status !== effectiveStatus) && (
             <SubscriptionStatusBadge status={effectiveStatus} />
           )}
-          {isAdmin && (
-            <Link
-              href="/admin"
-              className="btn btn-sm btn-outline btn-secondary"
-            >
-              Admin dashboard
-            </Link>
-          )}
+          <Link
+            href="/dashboard"
+            className="btn btn-sm btn-outline btn-secondary"
+          >
+            Dashboard
+          </Link>
+
         </div>
 
         {error && (
@@ -327,8 +324,48 @@ export default function Portal() {
         {sub && (sub.status === "active" || sub.status === "grace") && (
           <>
             <TalariaCredentialsPanel />
-            {/* Precision Pro only — plugin download link */}
-            {isPrecisionPro && <TalariaPluginDownloadPanel />}
+            {/* All Plans  — plugin download link */}
+            <TalariaPluginDownloadPanel />
+            {/* Next steps / navigation */}
+            <div className="card bg-base-100 shadow border border-base-300">
+              <div className="card-body">
+                <h3 className="card-title text-lg">What's next?</h3>
+                <ul className="space-y-3 text-sm">
+                  <li className="flex items-start gap-3">
+                    <span className="text-primary">1.</span>
+                    <span>
+                      <strong>Open the Hermes desktop app.</strong> Tell Hermes Agent to install the Talaria
+                      plugin. Paste your Talaria claim token into the plugin's Connect tab.
+                    </span>
+                  </li>
+
+
+
+                  <li className="flex items-start gap-3">
+                    <span className="text-primary">3.</span>
+                    <span>
+                      Return anytime to manage billing, cancel, or view payment history.
+                    </span>
+                  </li>
+                </ul>
+                <div className="card-actions mt-6">
+                  <Link href="/dashboard" className="btn btn-primary">
+                    Go to dashboard
+                  </Link>
+                  {process.env.NEXT_PUBLIC_DISCORD_URL && (
+                    <a
+                      href={process.env.NEXT_PUBLIC_DISCORD_URL}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn btn-outline"
+                    >
+                      Join Discord
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
+
           </>
         )}
         {sub && (sub.status === "expired" || sub.status === "cancelled") && (
