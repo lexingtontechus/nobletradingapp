@@ -29,7 +29,7 @@ import { useEffect, useState, useRef, Fragment } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
-import { TalariaMark } from "@/app/components/talaria-mark";
+import { TalariaMark } from "../components/talaria-mark";
 import { createClient } from "@/utils/supabase/client";
 
 // -- Toast state --
@@ -367,9 +367,9 @@ function RenkoSection({ sweeps, symbolList, selectedSym, onSelect, renkoBricks }
     if (sweepRow.entry_price > 0)
       levels.push({ label: "ENTRY", price: sweepRow.entry_price, color: "text-base-content/70", fill: "var(--color-base-content)" });
     if (sweepRow.stop_loss > 0)
-      levels.push({ label: "SL", price: sweepRow.stop_loss, color: "text-success/80", fill: "var(--color-success)" });
+      levels.push({ label: "SL", price: sweepRow.stop_loss, color: "text-error/80", fill: "var(--color-error)" });
     if (sweepRow.take_profit > 0)
-      levels.push({ label: "TP", price: sweepRow.take_profit, color: "text-error/80", fill: "var(--color-error)" });
+      levels.push({ label: "TP", price: sweepRow.take_profit, color: "text-success/80", fill: "var(--color-success)" });
   }
 
   // SVG chart dimensions — scale brick width to the actual number of bricks
