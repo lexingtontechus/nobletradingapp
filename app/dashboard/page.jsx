@@ -1416,7 +1416,7 @@ export default function DashboardPage() {
           signal,
         });
 
-        const isSell = String(signal?.signal || "").toLowerCase() === "sell";
+        const isSell = String(signal?.signal || signal?.direction || "").toLowerCase() === "sell";
         const direction = isSell ? "SELL" : "BUY";
         const kellyLabel = signal.effective_kelly
           ? `k${Number(signal.effective_kelly).toFixed(2)}`
