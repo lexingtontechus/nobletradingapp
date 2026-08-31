@@ -487,7 +487,7 @@ function RenkoSection({ sweeps, symbolList, selectedSym, onSelect, renkoBricks }
                   y1={y}
                   x2={CHART_W - 4}
                   y2={y}
-                  stroke="currentColor"
+                  stroke="var(--color-base-content)"
                   strokeWidth={0.25}
                   opacity={0.3}
                 />
