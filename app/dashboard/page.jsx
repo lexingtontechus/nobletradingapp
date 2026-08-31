@@ -39,6 +39,8 @@ import { createClient } from "@/utils/supabase/client";
 function useToasts() {
   const [toasts, setToasts] = useState([]);
 
+  const [copiedId, setCopiedId] = useState(null);
+
   const pushToast = (toast) => {
     const id = Date.now() + Math.random();
     setToasts((prev) => [...prev, { ...toast, id }]);
@@ -53,22 +55,23 @@ function useToasts() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  return { toasts, pushToast, dismiss, copyToast };
-}
+  // Copy signal prices to clipboard and show a brief confirmation
+  const copyToast = async (id, copyText) => {
+    if (!copyText) return;
+    try {
+      await navigator.clipboard.writeText(copyText);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch {
+      // Fallback: select the text in a textarea
+    }
+  };
 
-// Copy a toast's copyText to clipboard.
-function copyToast(id, copyText) {
-  if (!copyText || !navigator.clipboard) return;
-  navigator.clipboard.writeText(copyText).then(() => {
-    const ev = new CustomEvent("hermes:toast", {
-      detail: { title: "Copied", body: "Signal prices copied to clipboard" },
-    });
-    document.dispatchEvent(ev);
-  }).catch(() => {});
+  return { toasts, pushToast, dismiss, copyToast, copiedId };
 }
 
 // ToastContainer renders daisyUI toast markup at the top-right corner
-function ToastContainer({ toasts, onDismiss }) {
+function ToastContainer({ toasts, onDismiss, copiedId }) {
   if (!toasts.length) return null;
   return (
     <div className="toast toast-top toast-end">
@@ -94,11 +97,11 @@ function ToastContainer({ toasts, onDismiss }) {
             <div className="flex flex-col gap-1">
               {isCopyable && (
                 <button
-                  className="btn btn-ghost btn-xs"
+                  className={"btn btn-ghost btn-xs " + (copiedId === t.id ? "btn-success" : "")}
                   onClick={() => copyToast(t.id, t.copyText)}
                   title="Copy signal prices"
                 >
-                  📋
+                  {copiedId === t.id ? "✓ Copied" : "📋 Copy"}
                 </button>
               )}
               <button
@@ -585,6 +588,7 @@ function RenkoSection({ sweeps, symbolList, selectedSym, onSelect, renkoBricks }
                   strokeWidth={1}
                   strokeDasharray="4 2"
                   opacity={0.6}
+                  style={{ stroke: lv.fill }}
                 />
                 <text
                   x={CHART_W - 6}
@@ -1274,7 +1278,7 @@ function PortfolioStatsCard({ stats }) {
 
 export default function DashboardPage() {
   // --- Toast state (driven by Realtime broadcast signal events) ---
-  const { toasts, pushToast, dismiss, copyToast } = useToasts();
+  const { toasts, pushToast, dismiss, copyToast, copiedId } = useToasts();
 
   // --- Realtime subscription state ---
   // The plugin uses a raw Phoenix WebSocket to subscribe to broadcast channels
@@ -1698,7 +1702,7 @@ export default function DashboardPage() {
           </Fragment>
         )}
 
-        <ToastContainer toasts={toasts} onDismiss={dismiss} />
+        <ToastContainer toasts={toasts} onDismiss={dismiss} copiedId={copiedId} />
       </div>
     </div>
   );
