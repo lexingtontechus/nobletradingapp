@@ -392,6 +392,19 @@ function RenkoSection({ sweeps, symbolList, selectedSym, onSelect, renkoBricks }
 
   const levels = [];
   if (sweepRow) {
+    const isBuy = String(sweepRow.signal || "").toLowerCase() !== "sell";
+    // Validate: for BUY, SL < entry < TP; for SELL, TP < entry < SL.
+    // If the data doesn't fit the signal direction, the sweep data
+    // has been misinterpreted — log a warning so it can be fixed.
+    const slBelowEntry = sweepRow.stop_loss < sweepRow.entry_price;
+    const tpAboveEntry = sweepRow.take_profit > sweepRow.entry_price;
+    const dataOk = isBuy ? (slBelowEntry && tpAboveEntry) : (!slBelowEntry && !tpAboveEntry);
+    if (!dataOk && sweepRow.stop_loss > 0 && sweepRow.take_profit > 0) {
+      console.warn(
+        `[Renko] ${sweepRow.symbol}: signal=${sweepRow.signal} dataMismatch ` +
+        `entry=${sweepRow.entry_price} sl=${sweepRow.stop_loss} tp=${sweepRow.take_profit}`
+      );
+    }
     if (sweepRow.entry_price > 0)
       levels.push({ label: "ENTRY", price: sweepRow.entry_price, color: "text-base-content/70", fill: "var(--color-base-content)" });
     if (sweepRow.stop_loss > 0)
