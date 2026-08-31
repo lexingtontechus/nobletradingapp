@@ -116,10 +116,10 @@ function SuccessContent() {
                 </p>
                 <div className="card-actions mt-8">
                   <Link
-                    href="/portal"
+                    href="/welcome"
                     className="btn btn-primary"
                   >
-                    Go to your portal
+                    Continue to Talaria setup
                   </Link>
                 </div>
               </>

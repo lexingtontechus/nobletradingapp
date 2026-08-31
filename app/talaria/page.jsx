@@ -1,9 +1,9 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "Talaria — What It Is | Noble Trading App",
+  title: "Talaria | Noble Trading App",
   description:
-    "Talaria is the Noble Trading signal dashboard that lives inside the Hermes desktop app: live Renko charts, entry/stop/target on every signal, market-regime labels, and a 30-day signal health scoreboard. Named for Hermes' winged sandals — the layer that makes execution fast.",
+    "Talaria is the Noble Trading signal. It lives inside the Hermes desktop app: live Renko charts, entry/stop/target on every signal, market-regime labels, and a 30-day signal health scoreboard. Named for Hermes' winged sandals — the layer that makes execution fast.",
 };
 
 /* The Talaria mark (docs/talaria/talaria-mark.svg §01): the strap-node ring

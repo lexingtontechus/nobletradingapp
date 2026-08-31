@@ -19,13 +19,13 @@ import WidgetPaymentsPrecisionProChart from "./widget_payments_precisionpro_char
 import WidgetCustomersChart from "./widget_customers_chart";
 
 export default async function Admin() {
-  // await auth.protect();
-  const { has } = await auth();
-  const isAdmin = await checkRole("admin");
-  if (!isAdmin) {
-    redirect("/");
-  }
-  //const { userId } = await auth.protect({ permission: "org:admin" });
+  await auth.protect();
+   const { has } = await auth();
+   const isAdmin = await checkRole("admin");
+   if (!isAdmin) {
+     redirect("/");
+   }
+   //const { userId } = await auth.protect({ permission: "org:admin" });
 
   return (
     <div className="container p-8 mx-auto py-2">

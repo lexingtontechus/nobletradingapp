@@ -10,20 +10,22 @@ import {
   Show
 } from "@clerk/nextjs";
 import Link from "next/link";
-import Logo from "./logo";
+import LogoNTA from "./logonta";
 
 const IconAdmin = () => {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 448 512"
-      fill="currentColor"
+     className="fill-secondary"
     >
       <path d="M96 128a128 128 0 1 0 256 0A128 128 0 1 0 96 128zm94.5 200.2l18.6 31L175.8 483.1l-36-146.9c-2-8.1-9.8-13.4-17.9-11.3C51.9 342.4 0 405.8 0 481.3c0 17 13.8 30.7 30.7 30.7l131.7 0c0 0 0 0 .1 0l5.5 0 112 0 5.5 0c0 0 0 0 .1 0l131.7 0c17 0 30.7-13.8 30.7-30.7c0-75.5-51.9-138.9-121.9-156.4c-8.1-2-15.9 3.3-17.9 11.3l-36 146.9L238.9 359.2l18.6-31c6.4-10.7-1.3-24.2-13.7-24.2L224 304l-19.7 0c-12.4 0-20.1 13.6-13.7 24.2z" />
     </svg>
   );
 };
-
+const IconDashboard = () => {
+  return(<svg className="size-5 fill-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><path d="M64 320C64 178.6 178.6 64 320 64C461.4 64 576 178.6 576 320C576 461.4 461.4 576 320 576C178.6 576 64 461.4 64 320zM352 160C352 142.3 337.7 128 320 128C302.3 128 288 142.3 288 160C288 177.7 302.3 192 320 192C337.7 192 352 177.7 352 160zM320 480C355.3 480 384 451.3 384 416C384 399.8 378 384.9 368 373.7L437.5 234.8C443.4 222.9 438.6 208.5 426.8 202.6C415 196.7 400.5 201.5 394.6 213.3L325.1 352.2C323.4 352.1 321.7 352 320 352C284.7 352 256 380.7 256 416C256 451.3 284.7 480 320 480zM240 208C240 190.3 225.7 176 208 176C190.3 176 176 190.3 176 208C176 225.7 190.3 240 208 240C225.7 240 240 225.7 240 208zM160 352C177.7 352 192 337.7 192 320C192 302.3 177.7 288 160 288C142.3 288 128 302.3 128 320C128 337.7 142.3 352 160 352zM512 320C512 302.3 497.7 288 480 288C462.3 288 448 302.3 448 320C448 337.7 462.3 352 480 352C497.7 352 512 337.7 512 320z"/></svg>)
+}
 const IconPortal = () => {
   return (
     <svg className="size-5 fill-secondary" viewBox="0 0 512.001 512.001">
@@ -113,7 +115,7 @@ export default function Header() {
           href="/"
           className="inline-flex items-center gap-2 px-2 uppercase no-underline"
         >
-          <Logo size={36} padding={0} />
+          <LogoNTA size={36} padding={0} />
           <span className="text-xl font-bold tracking-wide text-base-content">
             Noble Trading App
           </span>
@@ -121,7 +123,7 @@ export default function Header() {
       </div>
       <div className=" flex-none ml-2 px-2">
         <Show when="signed-out">
-          <SignInButton forceRedirectUrl="/portal" signinforceredirecturl="/portal" fallbackRedirectUrl="/portal" oauthFlow="popup">
+          <SignInButton forceRedirectUrl="/dashboard" signinforceredirecturl="/dashboard" fallbackRedirectUrl="/dashboard" oauthFlow="popup">
             <div className="btn btn-secondary rounded-full font-bold">
               Members
             </div>
@@ -137,9 +139,15 @@ export default function Header() {
                   label="Admin"
                   labelIcon={<IconAdmin />}
                   href="/admin"
-                  forceRedirectUrl="/admin"
+                  forceRedirectUrl="/dashboard"
                 />
               )}
+              <UserButton.Link
+                label="Dashboard"
+                labelIcon={<IconDashboard />}
+                href="/dashboard"
+              />
+
               <UserButton.Link
                 label="Portal"
                 labelIcon={<IconPortal />}

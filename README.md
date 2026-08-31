@@ -5,11 +5,11 @@
 
 Noble Trading App is a full-stack subscription commerce product that lets
 traders subscribe to two tiers of real-time trade signals — **Signal Scout**
-($79/mo) and **Precision Pro** ($199/mo) — paid in crypto via
-[Helio / MoonPay Commerce](https://www.hel.io/), with automated renewal
+and **Precision Pro** — paid in crypto via
+[Helio / MoonPay Commerce](https://www.moonpay.hel.io/), with automated renewal
 reminders, Discord role sync (Helio's managed bot), and a **Talaria claim
 token** that authorizes the subscriber's own Hermes agent / trading client
-against Supabase for the live signal stream.
+against Talaria by Noble Trading App for the live signal stream.
 
 ---
 
@@ -47,8 +47,7 @@ stream consumption server-side, and Helio's managed bot handles Discord
 join/role automatically).
 
 The subscriber then opens their portal, reveals their Talaria credentials
-panel (a reveal-once flow), and copies `SUPABASE_URL`,
-`SUPABASE_PUBLISHABLE_KEY`, and their `TALARIA_CLAIM_TOKEN` into the Hermes
+panel (a reveal-once flow), and copies their `TALARIA_CLAIM_TOKEN` into the Hermes
 agent Talaria plugin. The token is minted by `/api/talaria-claim`, stored
 only as a SHA-256 hash, and validated live by the `talaria-check` Edge
 Function on every call — the token proves identity; the subscription row
@@ -276,8 +275,6 @@ portal's **Talaria credentials panel** (`app/components/talaria-credentials-pane
 mints a claim token and presents the connection bundle:
 
 ```bash
-SUPABASE_URL=https://pcvscowltlrxzgxjurcr.supabase.co
-SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 TALARIA_CLAIM_TOKEN=<64-hex, minted once>
 TALARIA_PLAN=<plan_slug>
 TALARIA_EXPIRES_AT=<ISO timestamp>
@@ -331,9 +328,9 @@ row, revokes prior live claims, mints `test-<plan_slug>-<32hex>` tokens
 Connect tab. Guards fail fast on a bad plan slug or an email already used by
 a real user.
 
-### Precision Pro — plugin download panel
+### Signal Scout & Precision Pro — plugin download panel
 
-Precision Pro subscribers also see a **Talaria plugin download panel**
+Signal Scout & Precision Pro subscribers see a **Talaria plugin download panel**
 (`app/components/talaria-plugin-download-panel.jsx`) directly below the
 credentials panel. It renders the plugin download URL from
 `NEXT_PUBLIC_TALARIA_PLUGIN` with a Download button + copy button. The panel
@@ -350,7 +347,7 @@ active/grace subscriptions.
 
 ## Redis credential lifecycle
 
-Subscribers run their own trading bots that need **sub-millisecond
+**Deprecated** - Subscribers run their own trading bots that need **sub-millisecond
 `XREADGROUP`** access to the live `signals:*` Redis Streams. We give each
 subscriber their own Redis ACL user with strict least-privilege permissions
 — no shared password, no `XADD`/`XTRIM`/`DEL`, no access to non-stream keys.
@@ -437,7 +434,7 @@ owns the entire reminder cadence via a daily pg_cron job.
 
 | Layer                | Choice                                                                 |
 | -------------------- | ---------------------------------------------------------------------- |
-| Web framework        | Next.js 16.0.7 (App Router, Turbopack)                                 |
+| Web framework        | Next.js 16.3.0 (App Router, Turbopack)                                 |
 | Language             | JavaScript (frontend) + TypeScript (Edge Functions)                    |
 | Auth                 | Clerk (`@clerk/nextjs` v6, `@clerk/elements`) — hybrid publicMetadata  |
 | Database             | Supabase Postgres + RLS (keyed on Clerk JWT `sub`)                     |

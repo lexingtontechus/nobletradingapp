@@ -46,7 +46,7 @@ export function TalariaPluginDownloadPanel() {
           <div className="flex items-center gap-3">
             <Download className="w-5 h-5 text-primary" />
             <div>
-              <h3 className="font-semibold">Talaria plugin — Precision Pro</h3>
+              <h3 className="font-semibold">Talaria plugin</h3>
               <p className="text-sm opacity-60">
                 Download the Talaria desktop plugin for Hermes agent.
               </p>
@@ -85,8 +85,8 @@ export function TalariaPluginDownloadPanel() {
 
         <p className="text-xs opacity-50 mt-2 flex items-center gap-1">
           <ExternalLink className="w-3 h-3" />
-          Requires an active Precision Pro subscription. Install the plugin in
-          Hermes, then paste the credentials from the panel above into its
+          Requires an active Noble Trading App subscription. Install the plugin in
+          Hermes, then paste the Talaria claim token from the panel above into its
           Connect tab.
         </p>
       </div>

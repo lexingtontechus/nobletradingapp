@@ -8,7 +8,7 @@
 //   GET /api/subscription-status
 //   → {
 //       user: { email, discord_id, discord_username, role },
-//       subscription: { id, status, plan_title, current_period_end,
+//       subscription: { id, status, plan_title, plan_slug, current_period_end,
 //                       grace_period_end, next_charge_url, reminder_count } | null,
 //       payments: [{ id, amount_cents, paid_at, is_renewal, token_symbol }],
 //       events: [{ event_type, received_at }]
@@ -18,8 +18,11 @@
 //   1. Single round-trip (vs. 3 separate client queries).
 //   2. The service role key stays server-side; the browser never sees it.
 //   3. We can shape the payload for the UI (e.g. only last 10 payments).
-//   4. Future: add Supabase Realtime subscription on the client to push
-//      updates instead of polling this endpoint.
+// 4. Future: add Supabase Realtime subscription on the client to push
+//    updates instead of polling this endpoint. The dashboard now uses
+//    createBrowserClient + supabase.channel('realtime:signals.<plan_slug>')
+//    for live broadcast events, with the plan_slug available on
+//    subscription.plans.slug in this response.
 // =============================================================================
 
 import { NextResponse } from "next/server"
@@ -92,7 +95,7 @@ export async function GET() {
       helio_email, helio_discord_id, helio_discord_username,
       reminder_count, last_reminder_sent_at, cancelled_at, created_at,
       plans(id, title, description, price_cents, currency, interval,
-            helio_paylink_id)
+            helio_paylink_id, slug)
     `
     )
     .eq("user_id", localUser.id)

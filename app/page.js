@@ -14,10 +14,10 @@ export default function Home() {
         <div className="hero-content mx-auto max-w-5xl text-center py-20">
           <div>
             <h1 className="text-4xl md:text-5xl font-bold">
-              Live trading signals, docked beside your chat
+              Live trading signals, docked beside your agent chat.
             </h1>
             <p className="text-xl opacity-70 mt-6 max-w-3xl mx-auto">
-              Talaria is the Noble Trading signal dashboard that lives inside
+              Talaria is the Noble Trading signal that lives inside
               the Hermes desktop app — the same window you already use for chat,
               agents, and work. No separate platform to open, no extra terminal
               to babysit.

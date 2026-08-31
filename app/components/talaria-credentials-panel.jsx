@@ -26,7 +26,7 @@
 // =============================================================================
 
 "use client"
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import {
   Copy,
   Check,
@@ -45,10 +45,10 @@ import {
 // never shows or ships them. Only the claim token + plan metadata are shown.
 // -----------------------------------------------------------------------------
 
-export function TalariaCredentialsPanel() {
-  const [revealed, setRevealed] = useState(false)
+export function TalariaCredentialsPanel({ autoReveal = false }) {
+  const [revealed, setRevealed] = useState(autoReveal)
   const [bundle, setBundle] = useState(null)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(autoReveal)
   const [error, setError] = useState(null)
   const [copiedKey, setCopiedKey] = useState(null)
   const [copiedAll, setCopiedAll] = useState(false)
@@ -80,6 +80,14 @@ export function TalariaCredentialsPanel() {
     setRevealed(true)
     if (!bundle) mintToken()
   }
+
+  // When autoReveal is set (e.g. on the /welcome page after payment), mint the
+  // claim token immediately on mount instead of waiting for a click.
+  useEffect(() => {
+    if (autoReveal && !bundle) {
+      mintToken()
+    }
+  }, [autoReveal, bundle, mintToken])
 
   function handleHide() {
     setRevealed(false)

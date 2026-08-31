@@ -161,7 +161,7 @@ export function SubscriptionCard({ subscription, onStatusChange, onPaid }) {
         <div className="card-actions mt-4 flex-wrap gap-2">
           {status === "active" && (
             <button
-              className="btn btn-ghost btn-sm"
+              className="btn btn-primary btn-sm"
               onClick={() => setCancelOpen(true)}
               disabled={busy}
             >

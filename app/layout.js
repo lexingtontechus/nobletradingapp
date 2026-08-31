@@ -2,6 +2,14 @@ import { ClerkProvider } from "@clerk/nextjs";
 import Header from "@/app/components/header";
 import Footer from "./components/footer";
 import { Analytics } from "@vercel/analytics/next";
+import posthog from "posthog-js";
+
+if (typeof window !== "undefined") {
+  posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY, {
+    api_host: process.env.POSTHOG_API_HOST || "https://us.i.posthog.com",
+    default_date: process.env.POSTHOG_DEFAULT_DATE || "2026-05-30",
+  });
+}
 
 import { dark } from "@clerk/themes";
 import "./globals.css";
@@ -36,7 +44,7 @@ export default function RootLayout({ children }) {
   return (
     <ClerkProvider
       waitlistUrl="/waitlist"
-      forceRedirectUrl="/portal"
+      forceRedirectUrl="/dashboard"
       appearance={{
         layout: {
           logoPlacement: "inside",
