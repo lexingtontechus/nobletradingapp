@@ -53,7 +53,18 @@ function useToasts() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  return { toasts, pushToast, dismiss };
+  return { toasts, pushToast, dismiss, copyToast };
+}
+
+// Copy a toast's copyText to clipboard.
+function copyToast(id, copyText) {
+  if (!copyText || !navigator.clipboard) return;
+  navigator.clipboard.writeText(copyText).then(() => {
+    const ev = new CustomEvent("hermes:toast", {
+      detail: { title: "Copied", body: "Signal prices copied to clipboard" },
+    });
+    document.dispatchEvent(ev);
+  }).catch(() => {});
 }
 
 // ToastContainer renders daisyUI toast markup at the top-right corner
@@ -61,31 +72,45 @@ function ToastContainer({ toasts, onDismiss }) {
   if (!toasts.length) return null;
   return (
     <div className="toast toast-top toast-end">
-      {toasts.map((t) => (
-        <div
-          key={t.id}
-          className={`alert alert-sm shadow-lg max-w-xs ${
-            t.tone === "pos"
-              ? "alert-success"
-              : t.tone === "neg"
-                ? "alert-error"
-                : t.tone === "warn"
-                  ? "alert-warning"
-                  : "alert-info"
-          }`}
-        >
-          <div className="flex-1">
-            <div className="text-sm font-semibold">{t.title}</div>
-            <div className="text-xs opacity-80">{t.body}</div>
-          </div>
-          <button
-            className="btn btn-ghost btn-xs btn-circle"
-            onClick={() => onDismiss(t.id)}
+      {toasts.map((t) => {
+        const isCopyable = t.copyable && t.copyText;
+        return (
+          <div
+            key={t.id}
+            className={`alert alert-sm shadow-lg max-w-xs ${
+              t.tone === "pos"
+                ? "alert-success"
+                : t.tone === "neg"
+                  ? "alert-error"
+                  : t.tone === "warn"
+                    ? "alert-warning"
+                    : "alert-info"
+            }`}
           >
-            ✕
-          </button>
-        </div>
-      ))}
+            <div className="flex-1">
+              <div className="text-sm font-semibold">{t.title}</div>
+              <div className="text-xs opacity-80 whitespace-pre-line">{t.body}</div>
+            </div>
+            <div className="flex flex-col gap-1">
+              {isCopyable && (
+                <button
+                  className="btn btn-ghost btn-xs"
+                  onClick={() => copyToast(t.id, t.copyText)}
+                  title="Copy signal prices"
+                >
+                  📋
+                </button>
+              )}
+              <button
+                className="btn btn-ghost btn-xs btn-circle"
+                onClick={() => onDismiss(t.id)}
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -269,16 +294,16 @@ function HotSignalsBanner({ signals }) {
           {hot.map((s) => {
             const isSell = String(s.signal || "").toLowerCase() === "sell";
             return (
-              <div
+              <span
                 key={s.symbol}
                 className={
                   "badge text-xs font-mono " +
-                  (isSell ? "badge-error" : "badge-success bg-green-400")
+                  (isSell ? "badge-error" : "badge-success")
                 }
-                title={`${s.symbol} ${isSell ? "Sell" : "Buy"} · kelly ${s.effective_kelly.toFixed(3)} · ${fmtRegime(s.regime)}`}
+                title={`${s.symbol} ${isSell ? "Sell" : "Buy"} · entry ${fmtBrickPriceUsd(s.entry_price)} · SL ${fmtBrickPriceUsd(s.stop_loss)} · TP ${fmtBrickPriceUsd(s.take_profit)} · kelly ${s.effective_kelly.toFixed(3)} · ${fmtRegime(s.regime)}`}
               >
-                {s.symbol} {isSell ? "↣" : "↟"} k{s.effective_kelly.toFixed(2)} {fmtRegime(s.regime)}
-              </div>
+                {s.symbol} {isSell ? "SELL" : "BUY"} · k{s.effective_kelly.toFixed(2)}
+              </span>
             );
           })}
         </div>
@@ -556,7 +581,7 @@ function RenkoSection({ sweeps, symbolList, selectedSym, onSelect, renkoBricks }
                   y1={priceToY(lv.price)}
                   x2={CHART_W - 4}
                   y2={priceToY(lv.price)}
-                  stroke="currentColor"
+                  stroke={lv.fill}
                   strokeWidth={1}
                   strokeDasharray="4 2"
                   opacity={0.6}
@@ -1249,7 +1274,7 @@ function PortfolioStatsCard({ stats }) {
 
 export default function DashboardPage() {
   // --- Toast state (driven by Realtime broadcast signal events) ---
-  const { toasts, pushToast, dismiss } = useToasts();
+  const { toasts, pushToast, dismiss, copyToast } = useToasts();
 
   // --- Realtime subscription state ---
   // The plugin uses a raw Phoenix WebSocket to subscribe to broadcast channels
@@ -1375,7 +1400,7 @@ export default function DashboardPage() {
         });
 
         const isSell = String(signal?.signal || "").toLowerCase() === "sell";
-        const direction = isSell ? "↣ SELL" : "↟ BUY";
+        const direction = isSell ? "SELL" : "BUY";
         const kellyLabel = signal.effective_kelly
           ? `k${Number(signal.effective_kelly).toFixed(2)}`
           : "";
@@ -1387,10 +1412,13 @@ export default function DashboardPage() {
         });
 
         // Fire a daisyUI toast (mirrors plugin's signalStore → toast flow)
+        // Include entry/SL/TP so the user can copy the full trade setup
         pushToast({
           title: `${signal.symbol} ${direction}`,
-          body: `${fmtRegime(signal.regime)} · ${kellyLabel} · EV ${fmtUsd(signal.ev)}`,
+          body: `${fmtRegime(signal.regime)} · ${kellyLabel} · EV ${fmtUsd(signal.ev)} · ENTRY ${fmtBrickPriceUsd(signal.entry_price)} · SL ${fmtBrickPriceUsd(signal.stop_loss)} · TP ${fmtBrickPriceUsd(signal.take_profit)}`,
           tone: signal.ev >= 0 ? "pos" : "neg",
+          copyable: true,
+          copyText: `${signal.symbol} ${direction}\nEntry: ${fmtBrickPriceUsd(signal.entry_price)}\nSL: ${fmtBrickPriceUsd(signal.stop_loss)}\nTP: ${fmtBrickPriceUsd(signal.take_profit)}\nRegime: ${fmtRegime(signal.regime)}\nkelly: ${kellyLabel}\nEV: ${fmtUsd(signal.ev)}`,
         });
       })
       .subscribe((status) => {
