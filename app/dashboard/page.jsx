@@ -295,7 +295,8 @@ function HotSignalsBanner({ signals }) {
         <h2 className="card-title">Talaria Live Signals</h2>
         <div className="flex items-center gap-2 flex-wrap">
           {hot.map((s) => {
-            const isSell = String(s.signal || "").toLowerCase() === "sell";
+            const isSell = String(s.signal || s.direction || "").toLowerCase() === "sell";
+            const isBuy = !isSell;
             return (
               <span
                 key={s.symbol}
@@ -392,7 +393,7 @@ function RenkoSection({ sweeps, symbolList, selectedSym, onSelect, renkoBricks }
 
   const levels = [];
   if (sweepRow) {
-    const isBuy = String(sweepRow.signal || "").toLowerCase() !== "sell";
+    const isBuy = String(sweepRow.signal || sweepRow.direction || "").toLowerCase() !== "sell";
     // Validate: for BUY, SL < entry < TP; for SELL, TP < entry < SL.
     // If the data doesn't fit the signal direction, the sweep data
     // has been misinterpreted — log a warning so it can be fixed.
@@ -915,7 +916,7 @@ function KellyTable({ sweeps, symbolList }) {
                   ...groups[cls]
                     .sort((a, b) => (a.symbol || "").localeCompare(b.symbol || ""))
                     .map((r) => {
-                      const isSell = String(r.signal || "").toLowerCase() === "sell";
+                      const isSell = String(r.signal || r.direction || "").toLowerCase() === "sell";
                       const rowCls = isSell ? "text-error" : "text-success";
                       return (
                         <tr key={r.symbol} className={rowCls}>
