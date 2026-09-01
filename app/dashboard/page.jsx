@@ -25,7 +25,7 @@
 
 "use client";
 
-import { useEffect, useState, useRef, Fragment } from "react";
+import { useEffect, useState, useRef, Fragment, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
@@ -41,7 +41,7 @@ function useToasts() {
 
   const [copiedId, setCopiedId] = useState(null);
 
-  const pushToast = (toast) => {
+  const pushToast = useCallback((toast) => {
     const id = Date.now() + Math.random();
     setToasts((prev) => [...prev, { ...toast, id }]);
     // Auto-dismiss after TTL (default 8s, matching plugin's toast TTL)
@@ -49,7 +49,7 @@ function useToasts() {
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, ttl);
-  };
+  }, []);
 
   const dismiss = (id) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -343,10 +343,10 @@ function TabBar({ active, onChange }) {
 // deterministic sequence so the chart looks realistic.
 function generateBricks(sweepRow, count = 10) {
   if (!sweepRow) return [];
-  const { brick_size, entry_price, signal } = sweepRow;
+  const { brick_size, entry_price, signal, direction } = sweepRow;
   if (entry_price <= 0 || brick_size <= 0) return [];
 
-  const isBuy = String(signal || "").toLowerCase() !== "sell";
+  const isBuy = String(signal || direction || "").toLowerCase() !== "sell";
   const bricks = [];
   // Deterministic pseudo-random sequence based on symbol hash so
   // different symbols produce different but stable patterns
@@ -392,8 +392,13 @@ function RenkoSection({ sweeps, symbolList, selectedSym, onSelect, renkoBricks }
     : generateBricks(sweepRow, 10);
 
   const levels = [];
+  // Trade direction, normalized from either REST (`signal`) or realtime
+  // (`direction`) field naming — used for the on-chart direction badge.
+  let sigDirection = null; // "buy" | "sell" | null
   if (sweepRow) {
-    const isBuy = String(sweepRow.signal || sweepRow.direction || "").toLowerCase() !== "sell";
+    const rawSig = String(sweepRow.signal || sweepRow.direction || "").toLowerCase();
+    sigDirection = rawSig === "sell" ? "sell" : rawSig === "buy" ? "buy" : null;
+    const isBuy = rawSig !== "sell";
     // Validate: for BUY, SL < entry < TP; for SELL, TP < entry < SL.
     // If the data doesn't fit the signal direction, the sweep data
     // has been misinterpreted — log a warning so it can be fixed.
@@ -406,12 +411,18 @@ function RenkoSection({ sweeps, symbolList, selectedSym, onSelect, renkoBricks }
         `entry=${sweepRow.entry_price} sl=${sweepRow.stop_loss} tp=${sweepRow.take_profit}`
       );
     }
+    // Chart labels are position-based (Upper/Lower bound), not direction-based.
+    // SL sits above entry for sells and below entry for buys — a fixed "SL"/"TP"
+    // label would read as "flipped" depending on direction even though the
+    // price is correct. Upper/Lower always matches what's drawn on the chart;
+    // the SL/TP tag (+ the direction badge above the chart) gives the meaning.
+    const slIsUpper = sweepRow.stop_loss > sweepRow.take_profit;
     if (sweepRow.entry_price > 0)
       levels.push({ label: "ENTRY", price: sweepRow.entry_price, color: "text-base-content/70", fill: "var(--color-base-content)" });
     if (sweepRow.stop_loss > 0)
-      levels.push({ label: "SL", price: sweepRow.stop_loss, color: "text-error/80", fill: "var(--color-error)" });
+      levels.push({ label: slIsUpper ? "UPPER" : "LOWER", tag: "SL", price: sweepRow.stop_loss, color: "text-error/80", fill: "var(--color-error)" });
     if (sweepRow.take_profit > 0)
-      levels.push({ label: "TP", price: sweepRow.take_profit, color: "text-success/80", fill: "var(--color-success)" });
+      levels.push({ label: slIsUpper ? "LOWER" : "UPPER", tag: "TP", price: sweepRow.take_profit, color: "text-success/80", fill: "var(--color-success)" });
   }
 
   // SVG chart dimensions — scale brick width to the actual number of bricks
@@ -457,14 +468,34 @@ function RenkoSection({ sweeps, symbolList, selectedSym, onSelect, renkoBricks }
   return (
     <div className="card bg-base-100 shadow border border-base-300 mb-6">
       <div className="card-body">
-        <h3 className="card-title text-lg">
-          Renko bricks — last 10 (per symbol)
-        </h3>
+        <div className="flex items-center gap-2 flex-wrap">
+          <h3 className="card-title text-lg">
+            Renko bricks — last 10 (per symbol)
+          </h3>
+          <span className="mx-2 font-semibold badge badge-primary">{selectedSym || "select a symbol"}</span>
+          {sigDirection && (
+            <span
+              className={
+                "badge font-mono font-semibold " +
+                (sigDirection === "sell" ? "badge-error" : "badge-success")
+              }
+              title={
+                sigDirection === "sell"
+                  ? "Short / sell — profits below entry, stops above entry"
+                  : "Long / buy — profits above entry, stops below entry"
+              }
+            >
+              {sigDirection === "sell" ? "SHORT · SELL" : "LONG · BUY"}
+            </span>
+          )}
+        </div>
         <p className="text-xs opacity-60 mb-3">
           Last {bricks.length} renko bricks of the selected symbol (each brick
           = one fixed price move of {sweepRow ? fmtUsd(sweepRow.brick_size) : "n/a"}).
-          ENTRY / SL / TP reference lines come from that symbol's latest
-          sweep. Switch symbols to re-analyze.
+          ENTRY / upper / lower reference lines come from that symbol's latest
+          sweep — upper/lower are labeled by chart position, not by SL/TP, since
+          which one sits on top flips with trade direction (see badge above).
+          Switch symbols to re-analyze.
         </p>
         <p><strong>Hover each brick for full price.</strong></p>
         {/* Symbol picker buttons */}
@@ -589,10 +620,10 @@ function RenkoSection({ sweeps, symbolList, selectedSym, onSelect, renkoBricks }
               );
             })}
 
-            {/* ENTRY / SL / TP reference horizontal lines */}
+            {/* ENTRY / upper / lower reference horizontal lines */}
             {levels.map((lv) => (
               <g key={lv.label}>
-                <title>{lv.label} @ {fmtBrickPriceFull(lv.price)}</title>
+                <title>{lv.tag ? `${lv.tag} (${lv.label.toLowerCase()})` : lv.label} @ {fmtBrickPriceFull(lv.price)}</title>
                 <line
                   x1={MARGIN_L}
                   y1={priceToY(lv.price)}
@@ -611,14 +642,14 @@ function RenkoSection({ sweeps, symbolList, selectedSym, onSelect, renkoBricks }
                   style={{ fill: lv.fill }}
                   className="text-[7px] font-mono font-semibold"
                 >
-                  {lv.label}
+                  {lv.tag ? `${lv.label} · ${lv.tag}` : lv.label}
                 </text>
               </g>
             ))}
           </svg>
         </div>
 
-        {/* ENTRY / SL / TP reference levels below chart */}
+        {/* ENTRY / upper / lower reference levels below chart */}
         {levels.length > 0 && (
           <div className="mt-3 text-xs">
             <div className="flex items-center gap-3 flex-wrap">
@@ -627,7 +658,7 @@ function RenkoSection({ sweeps, symbolList, selectedSym, onSelect, renkoBricks }
                   key={lv.label}
                   className={"font-mono " + lv.color}
                 >
-                  {lv.label}: {fmtBrickPriceUsd(lv.price)}
+                  {lv.tag ? `${lv.tag} (${lv.label.charAt(0)}${lv.label.slice(1).toLowerCase()})` : lv.label}: {fmtBrickPriceUsd(lv.price)}
                 </span>
               ))}
             </div>
@@ -635,7 +666,7 @@ function RenkoSection({ sweeps, symbolList, selectedSym, onSelect, renkoBricks }
         )}
 
         <p className="text-xs opacity-50 mt-2">
-          ENTRY / SL / TP reference lines from the latest sweep · window = last 10
+          ENTRY / upper / lower reference lines from the latest sweep · window = last 10
           bricks
         </p>
       </div>
@@ -654,7 +685,7 @@ function MarkovSection({ sweeps, selectedSym, renkoBricks }) {
     ? symbolBricks.slice(0, 10).map((b) =>
         Number(b.close_price) > Number(b.open_price) ? "U" : "D"
       )
-    : (sweepRow ? [sweepRow.signal === "buy" ? "U" : "D"] : []);
+    : (sweepRow ? [String(sweepRow.signal || sweepRow.direction || "").toLowerCase() === "buy" ? "U" : "D"] : []);
   const patternStr = rawDirs.join("");
   // Collapse consecutive same-direction to show distinct direction changes
   const collapsed = patternStr.replace(/(.)\1+/g, "$1");
@@ -921,7 +952,7 @@ function KellyTable({ sweeps, symbolList }) {
                       return (
                         <tr key={r.symbol} className={rowCls}>
                           <td className="font-mono">{r.symbol}</td>
-                          <td>{r.signal || "—"}</td>
+                          <td>{String(r.signal || r.direction || "") || "—"}</td>
                           <td className="text-right font-mono">
                             {r.effective_kelly != null
                               ? "k" + Number(r.effective_kelly).toFixed(3)
@@ -1494,7 +1525,7 @@ export default function DashboardPage() {
           })
           .catch(() => {});
       }
-    }, 60000);
+    }, 300000);
 
     return () => {
       clearInterval(pollTimer);
@@ -1614,8 +1645,8 @@ export default function DashboardPage() {
             value={wsStatus === "connected" ? "Live" : wsStatus === "error" ? "Error" : "Connecting"}
             sub={
               wsStatus === "connected"
-                ? `Signals (${planTitle || "loading"}· Realtime ✓)`
-                : `Signals (${planTitle || "loading"}· REST poll 60s)`
+                ? `Signals (${planTitle || "loading"} · Realtime ✓)`
+                : `Signals (${planTitle || "loading"} · REST poll 60s)`
             }
             tone={wsStatus === "connected" ? "pos" : wsStatus === "error" ? "neg" : "warn"}
           />

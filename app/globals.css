@@ -27,7 +27,9 @@
   --color-neutral-content: oklch(94.371% 0.017 88.001); /* Marble */
   --color-info: oklch(83.044% 0.027 242.809); /* Wingsilver light #B9CAD8 */
   --color-info-content: oklch(19.242% 0.015 272.492); /* Ink */
-  --color-success: oklch(69.212% 0.056 139.97); /* Sage #8AA584 */
+  --color-success: oklch(0.6926 0.1135 139.97);
+  /*oklch(69.212% 0.056 139.97);*/
+  /* Sage #8AA584 */
   --color-success-content: oklch(19.242% 0.015 272.492); /* Ink */
   --color-warning: oklch(79.845% 0.131 88.245); /* Gold #E0B84E */
   --color-warning-content: oklch(19.242% 0.015 272.492); /* Ink */

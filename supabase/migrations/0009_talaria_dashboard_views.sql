@@ -33,10 +33,10 @@
 -- the plugin uses. Exposes tradingview_symbol for TVChart embedding.
 -- The backend (migration 032) backfills plan_ids for all active symbols.
 --
--- NOTE: nt_symbol may have multiple rows per symbol (one per exchange, per
--- migration 031's UNIQUE(symbol, exchange) composite). We DISTINCT ON symbol
--- so consumers get one row per symbol — the symbol picker / Renko chart
--- operates per-symbol, not per-venue.
+-- Uses DISTINCT ON (s.symbol) to get one row per symbol — the symbol picker
+-- / Renko chart operates per-symbol, not per-venue.
+-- Column order matters for PostgREST: s.symbol must be first (DISTINCT ON key),
+-- and s.id must be included (PostgREST requires an "id" column for pagination).
 CREATE OR REPLACE VIEW public.v_talaria_symbols AS
 SELECT DISTINCT ON (s.symbol)
   s.symbol,
@@ -60,11 +60,16 @@ COMMENT ON VIEW public.v_talaria_symbols IS
 -- Joins nt_sweep_result with the latest nt_regime_log row per symbol to provide
 -- markov_p_up / markov_p_dn (not on nt_sweep_result, only on nt_regime_log).
 -- Uses DISTINCT ON (symbol) to get one row per symbol, the latest by sweep_timestamp.
-CREATE OR REPLACE VIEW public.v_talaria_latest_signals AS
+-- Column order matters for PostgREST: s.symbol must be first (DISTINCT ON key),
+-- and s.id must be included (PostgREST requires an "id" column for pagination).
+DROP VIEW IF EXISTS public.v_talaria_latest_signals;
+
+CREATE VIEW public.v_talaria_latest_signals AS
 SELECT DISTINCT ON (s.symbol)
   s.symbol,
   s.sweep_timestamp       AS sweep_timestamp,
   s.regime,
+  s.id,
   s.regime_conf,
   l.markov_p_up,
   l.markov_p_dn,
@@ -102,11 +107,11 @@ LEFT JOIN LATERAL (
 ORDER BY s.symbol, s.sweep_timestamp DESC;
 
 COMMENT ON VIEW public.v_talaria_latest_signals IS
-  'Latest sweep result per symbol (one row per symbol, newest first). '
+ 'Latest sweep result per symbol (one row per symbol, newest first). '
   'Joins nt_sweep_result with the latest nt_regime_log to add markov_p_up/dn. '
   'Consumers select: symbol,sweep_timestamp,regime,regime_conf,markov_p_up,markov_p_dn,'
   'p_win,ev,p_timesfm,kelly_f,effective_kelly,brick_size,sl_bricks,tp_bricks,signal,'
-  'entry_price,stop_loss,take_profit,qualified,aggression,regime_shift,prev_regime,size_mult.'
+  'entry_price,stop_loss,take_profit,qualified,aggression,regime_shift,prev_regime,size_mult,id.'
   'Read by the Talaria plugin + web dashboard via anon key.';
 
 -- ─── 3. v_talaria_renko — renko bricks (current session, latest 10 per symbol) ──

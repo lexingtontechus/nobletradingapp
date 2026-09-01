@@ -65,7 +65,7 @@ const FEATURES = [
     body: "A dockable status-bar chip and side-pane widget keep new signals visible next to your chat session, and one persistent in-app alert updates with each new qualified signal — local time and regime included, no notification spam.",
   },
   {
-    title: "Paper portfolio (Precision Pro)",
+    title: "Paper portfolio",
     body: "A simulated trade book — no real money — with a daily equity curve, realized profit measured in units of risk per trade, and a risk-adjusted scorecard: Sharpe, Sortino, Calmar, max drawdown, volatility, and profit factor.",
   },
   {
