@@ -8,7 +8,7 @@
 
 ![](talaria-mark.svg)
 
-In Greek myth, the **talaria** were the winged sandals that carried Hermes between the realms of gods and mortals — the fastest thing that moved. As a plugin name for a trading agent already built around Hermes, it maps directly: **Talaria is the layer that makes execution fast** — order routing, latency-sensitive fills, the last mile between a signal and a filled position.
+In Greek myth, the **talaria** were the winged sandals that carried Hermes between the realms of gods and mortals — the fastest thing that moved. As a plugin name for Hermes, it maps directly: **Talaria is the layer that makes execution fast** — order routing, latency-sensitive fills, the last mile between a signal and a filled position.
 
 The mark is not a literal sandal. It's the strap-node (the ankle buckle, reduced to a single ring) with feathers drawn as accelerating diagonal strokes — each one shorter and steeper than the last, so the glyph reads as motion rather than as an object at rest. It doubles as a loading / in-flight indicator in the UI.
 

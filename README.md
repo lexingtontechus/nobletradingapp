@@ -70,7 +70,7 @@ maps 1:1 to a Helio Subscription Pay Link.
 
 | Plan             | Price      | Interval | What you get                                                        | Helio paylink source       |
 | ---------------- | ---------- | -------- | ------------------------------------------------------------------- | -------------------------- |
-| **Signal Scout** | $79.00/mo  | MONTH    | Entry-level trade signals + community access                        | `plans.helio_paylink_id`   |
+| **Signal Scout** | $199.00/mo  | MONTH    | Entry-level trade signals + community access                        | `plans.helio_paylink_id`   |
 | **Precision Pro**| $199.00/mo | MONTH    | Premium signals, live alerts, advanced analytics. **Most popular.** | `plans.helio_paylink_id`   |
 
 The Helio paylink id is read from the `plans` table (via `/api/plans` and
@@ -567,7 +567,7 @@ All migrations are idempotent (`IF NOT EXISTS` / `ON CONFLICT`).
 (bypasses RLS).
 
 ### `0002_seed_plans.sql`
-Seeds Signal Scout ($79/mo) + Precision Pro ($199/mo) with `ON CONFLICT`
+Seeds Signal Scout ($199/mo) + Precision Pro ($199/mo) with `ON CONFLICT`
 upsert. Includes commented-out pg_cron schedule for the reminder job.
 
 ### `0003_add_agentmail_tracking.sql`

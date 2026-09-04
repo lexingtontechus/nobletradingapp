@@ -56,11 +56,11 @@ const PLAN_COPY = {
   pro: {
     badge: "The full seat",
     tagline:
-      "The Talaria trading agent, twenty curated symbols, live alerts and the analytics to verify the edge.",
+      "Talaria signals, twenty curated symbols, live alerts and the analytics to verify the edge.",
     features: [
       "Everything in Signal Scout, plus:",
       "Twenty curated symbols — double the Scout watchlist",
-      "The Talaria trading agent watching markets around the clock",
+      "Talaria watches markets around the clock",
       "Paper portfolio: daily equity curve, realized PnL & R-multiple",
       "Portfolio analytics — Sharpe, Sortino, Calmar, drawdown & more",
       "Paper vs. equal-weight benchmark — proof, not promises",

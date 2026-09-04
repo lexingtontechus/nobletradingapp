@@ -22,7 +22,7 @@ wording but never invent product claims:
   paper portfolio + benchmark honesty on Pro; daily digest.
 - `docs/marketing/signal-scout.md` — **$199.00 USD/month**, 10 curated symbols,
   quality-gated signals, full Talaria dashboard, community (Discord) access.
-- `docs/marketing/precision-pro.md` — **$599/month**, Talaria Trading Agent,
+- `docs/marketing/precision-pro.md` — **$599/month**, Talaria Signals,
   20 curated symbols, live alerts & advanced analytics, paper portfolio +
   portfolio analytics (Sharpe/Sortino/Calmar/max DD/vol/profit factor),
   **"Most popular"**.

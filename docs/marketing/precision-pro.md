@@ -1,10 +1,10 @@
 # Precision Pro
 
-**The Talaria Trading Agent, 20 curated symbols, live alerts & advanced analytics. Most popular.**
+**Talaria Signals, 20 curated symbols, live alerts & advanced analytics. Most popular.**
 
-## A trading agent that works the markets so you don't have to
+## A Quant Engine that works the markets so you don't have to
 
-Precision Pro is Noble Trading's flagship tier: the full Talaria client plugin experience, running beside your chat inside the Hermes desktop app. Talaria is your trading agent — it watches 20 curated markets around the clock, qualifies high-confidence signals, and delivers each one with the levels that matter: entry, stop-loss, and take-profit. Beneath the signals sits something most signal services never show: a complete performance analytics layer that tells you, in plain numbers, whether the strategy is actually working.
+Precision Pro is Noble Trading's flagship tier: the full Talaria client plugin experience, running beside your chat inside the Hermes desktop app. Talaria is your signal source — it watches 20 curated markets around the clock, qualifies high-confidence signals, and delivers each one with the levels that matter: entry, stop-loss, and take-profit. Beneath the signals sits something most signal services never show: a complete performance analytics layer that tells you, in plain numbers, whether the strategy is actually working.
 
 ## What you get with Precision Pro
 

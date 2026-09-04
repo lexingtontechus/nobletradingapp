@@ -26,7 +26,7 @@ Signal Scout is built for traders starting out with a systematic signal feed, an
 
 ## Upgrade path
 
-Trading more markets and want deeper analysis? **Precision Pro** expands the watchlist to twenty symbols and adds the Talaria trading agent plus advanced analytics, including a paper portfolio and full portfolio statistics. Signal Scout is the on-ramp; Precision Pro is the full seat.
+Trading more markets and want deeper analysis? **Precision Pro** expands the watchlist to twenty symbols and adds the Talaria plus advanced analytics, including a paper portfolio and full portfolio statistics. Signal Scout is the on-ramp; Precision Pro is the full seat.
 
 ## Start scouting
 

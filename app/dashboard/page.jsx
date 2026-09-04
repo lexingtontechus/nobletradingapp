@@ -289,14 +289,33 @@ function HotSignalsBanner({ signals }) {
   const hot = (signals || []).filter((s) => s.qualified);
   if (hot.length === 0) return null;
 
+  const latestTs = hot.reduce((max, s) => {
+    const t = s.sweep_timestamp ? new Date(s.sweep_timestamp).getTime() : 0;
+    return t > max ? t : max;
+  }, 0);
+
   return (
     <div className="card bg-base-300 shadow border border-base-300 mb-6">
       <div className="card-body py-3">
-        <h2 className="card-title">Talaria Live Signals</h2>
+        <div className="flex items-center justify-between flex-wrap gap-x-3 gap-y-1">
+          <h2 className="card-title">Talaria Live Signals</h2>
+          {latestTs > 0 && (
+            <span className="text-xs opacity-60">
+              as of {new Date(latestTs).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
+            </span>
+          )}
+        </div>
+        <p className="text-xs opacity-60 -mt-1 mb-2">
+          <span className="font-mono">k</span> = Kelly fraction — the model&apos;s suggested position
+          size as a share of your risk capital, e.g. <span className="font-mono">k0.03</span> suggests
+          risking about 3% of capital on that trade (not 3% of your whole account balance). Higher k
+          means higher model conviction. A sizing suggestion, not investment advice.
+        </p>
         <div className="flex items-center gap-2 flex-wrap">
           {hot.map((s) => {
             const isSell = String(s.signal || s.direction || "").toLowerCase() === "sell";
             const isBuy = !isSell;
+            const kellyPct = (s.effective_kelly * 100).toFixed(1);
             return (
               <span
                 key={s.symbol}
@@ -304,7 +323,7 @@ function HotSignalsBanner({ signals }) {
                   "badge text-xs font-mono " +
                   (isSell ? "badge-error" : "badge-success")
                 }
-                title={`${s.symbol} ${isSell ? "Sell" : "Buy"} · entry ${fmtBrickPriceUsd(s.entry_price)} · SL ${fmtBrickPriceUsd(s.stop_loss)} · TP ${fmtBrickPriceUsd(s.take_profit)} · kelly ${s.effective_kelly.toFixed(3)} · ${fmtRegime(s.regime)}`}
+                title={`${s.symbol} ${isSell ? "Sell" : "Buy"} · entry ${fmtBrickPriceUsd(s.entry_price)} · SL ${fmtBrickPriceUsd(s.stop_loss)} · TP ${fmtBrickPriceUsd(s.take_profit)} · Kelly ${s.effective_kelly.toFixed(3)} (risk ≈${kellyPct}% of capital) · ${fmtRegime(s.regime)}`}
               >
                 {s.symbol} {isSell ? "SELL" : "BUY"} · k{s.effective_kelly.toFixed(2)}
               </span>
@@ -893,6 +912,29 @@ function TVChart({ symbol, symbolsData }) {
 
 // --- Analysis tab content ---
 
+// Turns a raw signal row into a call the user can actually act on. The raw
+// `signal`/`direction` field is a directional lean the model computed — it's
+// set to "buy"/"sell" even when the signal never cleared the qualification
+// gate (qualified=false) or the engine ended up sizing it at 0 Kelly. Showing
+// that with the same full-strength BUY/SELL coloring as a qualified,
+// meaningfully-sized signal is misleading (e.g. AAPL can show "buy" while
+// qualified=false and effective_kelly=0 — there's no real conviction behind
+// it). Only a qualified signal with nonzero effective Kelly gets the strong
+// BUY/SELL treatment; everything else reads as WAIT (no directional lean, or
+// explicitly "neutral") or CAUTION (a lean exists but hasn't cleared the gate).
+function signalCall(r) {
+  const raw = String(r?.signal || r?.direction || "").toLowerCase();
+  if (!raw || raw === "neutral") {
+    return { label: "WAIT", toneClass: "opacity-50" };
+  }
+  const isSell = raw === "sell";
+  const strong = Boolean(r?.qualified) && Number(r?.effective_kelly) > 0;
+  if (strong) {
+    return { label: isSell ? "SELL" : "BUY", toneClass: isSell ? "text-error" : "text-success" };
+  }
+  return { label: `CAUTION (${isSell ? "sell" : "buy"} lean)`, toneClass: "text-warning" };
+}
+
 function KellyTable({ sweeps, symbolList }) {
   // Iterate over the active symbol list (from v_talaria_symbols — 14 symbols),
   // looking up each symbol's latest sweep row from the merged sweeps data.
@@ -920,7 +962,11 @@ function KellyTable({ sweeps, symbolList }) {
         <p className="text-xs opacity-60 mb-3">
           Latest signal per symbol. Table grouped by asset class, sorted by
           symbol. Effective Kelly = post-EV scaling fraction of the book the
-          engine would risk (blue buy, red sell). Dash (—) = not enough data.
+          engine would risk. Dash (—) = not enough data. Signal shows BUY/SELL
+          only once a signal has qualified with nonzero Kelly sizing behind it —
+          otherwise it reads WAIT (no directional lean) or CAUTION (a lean
+          exists but hasn&apos;t cleared the qualification gate), so a raw
+          direction isn&apos;t shown with the same weight as an actionable one.
         </p>
         <div className="overflow-x-auto">
           <table className="table table-sm">
@@ -937,26 +983,24 @@ function KellyTable({ sweeps, symbolList }) {
                 <th>Entry</th>
                 <th>SL</th>
                 <th>TP</th>
-                <th>Qualified</th>
               </tr>
             </thead>
             <tbody>
               {allGroups.map((cls) => (
                 [
                   <tr key={"header-" + cls} className="bg-base-200/50">
-                    <td colSpan={12} className="text-xs font-semibold py-1">
+                    <td colSpan={11} className="text-xs font-semibold py-1">
                       {groupLabels[cls] || cls}
                     </td>
                   </tr>,
                   ...groups[cls]
                     .sort((a, b) => (a.symbol || "").localeCompare(b.symbol || ""))
                     .map((r) => {
-                      const isSell = String(r.signal || r.direction || "").toLowerCase() === "sell";
-                      const rowCls = isSell ? "text-error" : "text-success";
+                      const call = signalCall(r);
                       return (
-                        <tr key={r.symbol} className={rowCls}>
+                        <tr key={r.symbol}>
                           <td className="font-mono">{r.symbol}</td>
-                          <td>{String(r.signal || r.direction || "") || "—"}</td>
+                          <td className={`font-semibold ${call.toneClass}`}>{call.label}</td>
                           <td className="text-right font-mono">
                             {r.effective_kelly != null
                               ? "k" + Number(r.effective_kelly).toFixed(3)
@@ -978,7 +1022,6 @@ function KellyTable({ sweeps, symbolList }) {
                           <td>{r.entry_price != null && r.entry_price > 0 ? fmtBrickPriceFull(r.entry_price) : "—"}</td>
                           <td>{r.stop_loss != null && r.stop_loss > 0 ? fmtBrickPriceFull(r.stop_loss) : "—"}</td>
                           <td>{r.take_profit != null && r.take_profit > 0 ? fmtBrickPriceFull(r.take_profit) : "—"}</td>
-                          <td>{r.qualified ? "✓" : "—"}</td>
                         </tr>
                       );
                     }),

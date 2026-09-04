@@ -165,7 +165,7 @@ export default function Home() {
                 $599 <span className="text-base opacity-70">/ month</span>
               </div>
               <p>
-                The Talaria Trading Agent — 20 curated symbols, live alerts, and
+                The Talaria Signals — 20 curated symbols, live alerts, and
                 advanced analytics, including a simulated paper portfolio with a
                 full risk-adjusted tear-sheet.
               </p>
