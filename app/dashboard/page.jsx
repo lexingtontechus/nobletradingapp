@@ -25,7 +25,7 @@
 
 "use client";
 
-import { useEffect, useState, useRef, Fragment, useCallback } from "react";
+import { useEffect, useState, useRef, Fragment, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
@@ -320,7 +320,7 @@ function HotSignalsBanner({ signals }) {
 function TabBar({ active, onChange }) {
   return (
     <div className="tabs tabs-border mb-4">
-      {["market", "analysis"].map((tab) => (
+      {["market", "analysis", "portfolio"].map((tab) => (
         <button
           key={tab}
           className={
@@ -331,7 +331,11 @@ function TabBar({ active, onChange }) {
           }
           onClick={() => onChange(tab)}
         >
-          {tab === "market" ? "Market" : "Analysis"}
+          {tab === "market"
+            ? "Market"
+            : tab === "analysis"
+              ? "Analysis"
+              : "Portfolio"}
         </button>
       ))}
     </div>
@@ -1318,8 +1322,491 @@ function PortfolioStatsCard({ stats }) {
     </div>
   );
 }
+// ─── Portfolio view: live symbols watchlist (Google-Finance style) ───────────
+// Precision-Pro-only: shows the plan's active symbols as a watchlist table.
+//
+// DATA AVAILABILITY: The fastapi-backend does NOT expose live market prices
+// through any Supabase view — `last_price` comes from the in-memory
+// SessionRegistry price buffer at runtime, not a stored column. The webapp's
+// read-only anon path cannot fetch live prices. The closest available
+// price-proxy is the latest Renko brick close_price from v_talaria_renko
+// (already fetched as `renkoBricks` by /api/dashboard-data). See worklog §6
+// "Implementation Constraints" for the full analysis.
+//
+// Columns:
+//   Symbol | Asset | Brick Close (price proxy) | Signal | Entry |
+//   Paper PnL (lifetime) | Eq. Share (1/N) | Win Rate | Profit Factor | Qualified
+// Correlation color scale — green(good)->gray(neutral)->red(bad), using the
+// dataviz skill's fixed STATUS palette (good/critical), not the neutral
+// diverging pair. Rationale: for concentration risk, correlation isn't a
+// direction-only statistic — negative/low correlation is a genuine hedge
+// (good), high positive correlation means redundant exposure with no
+// diversification benefit (bad). A neutral blue<->red diverging scale (the
+// original choice) reads as "which direction," not "is this good or bad,"
+// and users flagged a predominantly-red matrix as looking alarmist/backwards
+// without that framing. Linear RGB interpolation, clamped to [-1, 1].
+const CORR_NEG = [0x0c, 0xa3, 0x0c]; // #0ca30c (status: good)
+const CORR_MID = [0x38, 0x38, 0x35]; // #383835 (neutral)
+const CORR_POS = [0xd0, 0x3b, 0x3b]; // #d03b3b (status: critical)
 
-// --- Main page component ---
+function lerpRgb(a, b, t) {
+  return a.map((c, i) => Math.round(c + (b[i] - c) * t));
+}
+
+function corrColor(v) {
+  const clamped = Math.max(-1, Math.min(1, Number(v) || 0));
+  const [r, g, b] = clamped < 0 ? lerpRgb(CORR_NEG, CORR_MID, clamped + 1) : lerpRgb(CORR_MID, CORR_POS, clamped);
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+// Same green->gray->red scale as corrColor, rescaled to a 0..1 agreement
+// rate (0.5 = coin-flip/neutral, 1.0 = always same direction = redundant bet).
+function agreementColor(rate) {
+  const clamped = Math.max(0, Math.min(1, Number(rate) || 0));
+  const [r, g, b] = clamped < 0.5 ? lerpRgb(CORR_NEG, CORR_MID, clamped * 2) : lerpRgb(CORR_MID, CORR_POS, (clamped - 0.5) * 2);
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+// daisyUI `list` (https://daisyui.com/components/list/) used as a small
+// titled "top pairs" card — the callout for the correlation/agreement
+// matrices' most-notable pairs, so they read as a scannable highlight
+// rather than a run-on sentence of comma-separated pairs.
+function PairList({ title, tone, pairs, valueFormatter, emptyLabel }) {
+  const badgeClass = tone === "error" ? "badge-error" : "badge-success";
+  return (
+    <ul className="list bg-base-200 rounded-box p-4">
+      <li className="p-2 pb-1 text-md font-bold opacity-70">{title}</li>
+      {pairs.length === 0 ? (
+        <li className="px-3 pb-2 text-xs opacity-40">{emptyLabel}</li>
+      ) : (
+        pairs.map((p) => (
+          <li key={`${p.a}-${p.b}`} className="flex items-center justify-between px-3 py-1.5 text-xs">
+            <span className="font-mono">{p.a} ↔ {p.b}</span>
+            <span className={`badge badge-sm font-mono ${badgeClass}`}>{valueFormatter(p)}</span>
+          </li>
+        ))
+      )}
+    </ul>
+  );
+}
+
+// Signal risk overview — replaces the old paper-vs-equal-weight PortfolioView
+// AND the earlier raw correlation-heatmap-first design. Talaria-native reframe
+// (locked in 2026-09-04, see docs/worklog-backend-capability-exposure.md):
+// headline is regime alignment + Kelly-weighted concentration, NOT the "regime-
+// adjusted maximum Sharpe portfolio" framing borrowed from noble-trader-agent-
+// frontend/noble-trader-admin (Talaria has no brokerage integration — there's
+// no "current portfolio weights" to rebalance). The correlation matrix is kept
+// as supporting detail, collapsed by default.
+//
+// Fetches from /api/portfolio-analytics/correlation and .../signal-agreement,
+// both server-side proxies to nobletradingapp-backend
+// (https://github.com/lexingtontechus/nobletradingapp-backend). Cached
+// server-side (12h), so this is a read of a pre-computed result, not a live
+// on-demand call.
+function SignalRiskCard({ isPro }) {
+  const [overview, setOverview] = useState(null);
+  const [agreement, setAgreement] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = useCallback(async (refresh) => {
+    refresh ? setRefreshing(true) : setLoading(true);
+    try {
+      const suffix = refresh ? "?refresh=1" : "";
+      const [ovRes, agRes] = await Promise.all([
+        fetch(`/api/portfolio-analytics/correlation${suffix}`),
+        fetch(`/api/portfolio-analytics/signal-agreement${suffix}`),
+      ]);
+      setOverview(await ovRes.json());
+      setAgreement(await agRes.json());
+    } catch (e) {
+      setOverview({ error: String(e) });
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isPro) load(false);
+    else setLoading(false);
+  }, [isPro, load]);
+
+  if (!isPro) {
+    return (
+      <div className="card bg-base-100 shadow border border-base-300 mb-6">
+        <div className="card-body">
+          <h3 className="card-title text-lg">Signal risk overview</h3>
+          <div className="alert alert-info mt-2">
+            <div>
+              <h3 className="font-bold">Precision Pro feature</h3>
+              <div className="text-xs">Upgrade to see regime alignment, Kelly-weighted concentration, and concurrent-signal agreement across your plan&apos;s symbols.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const kellyScore = overview?.kelly_correlation_score;
+  const kellyTone = kellyScore == null ? undefined : kellyScore > 1.1 ? "neg" : kellyScore < 0.9 ? "pos" : undefined;
+
+  const agreementPairs = [];
+  if (agreement?.agreement_matrix && agreement?.symbols) {
+    for (let i = 0; i < agreement.symbols.length; i++) {
+      for (let j = i + 1; j < agreement.symbols.length; j++) {
+        const rate = agreement.agreement_matrix[i]?.[j];
+        if (rate != null) {
+          agreementPairs.push({
+            a: agreement.symbols[i],
+            b: agreement.symbols[j],
+            rate,
+            overlapDays: agreement.overlap_days_matrix?.[i]?.[j] ?? 0,
+          });
+        }
+      }
+    }
+    agreementPairs.sort((x, y) => y.overlapDays - x.overlapDays);
+  }
+
+  return (
+    <div className="card bg-base-100 shadow border border-base-300 mb-6">
+      <div className="card-body">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h3 className="card-title text-lg">Signal risk overview</h3>
+          <button
+            className="btn btn-xs btn-outline"
+            disabled={loading || refreshing}
+            onClick={() => load(true)}
+          >
+            {refreshing ? "Refreshing…" : "Refresh"}
+          </button>
+        </div>
+        <p className="text-xs opacity-60 mt-1 mb-3">
+          How correlated is the risk behind this plan&apos;s active signals right now —
+          not a portfolio to rebalance, since Talaria has no brokerage integration.
+          Cached — &quot;Refresh&quot; forces a recompute (may take up to a minute on a cold backend).
+        </p>
+
+        {loading && <div className="opacity-60 text-sm py-6 text-center">Loading…</div>}
+
+        {!loading && overview?.error && !overview?.correlation_matrix && (
+          <div className="alert alert-warning">
+            <span className="text-sm">{overview.error}</span>
+          </div>
+        )}
+
+        {!loading && overview?.correlation_matrix && (
+          <>
+            <div className="grid gap-3 sm:grid-cols-3 mb-4">
+              <StatCard
+                title="Dominant regime"
+                value={fmtRegime(overview.dominant_regime)}
+                sub={`${((overview.dominant_regime_share || 0) * 100).toFixed(0)}% of symbols share it`}
+              />
+              <StatCard
+                title="Kelly concentration"
+                value={kellyScore != null ? kellyScore.toFixed(2) + "×" : "—"}
+                sub="vs. treating today's signals as independent"
+                tone={kellyTone}
+              />
+              <StatCard
+                title="Correlation regime"
+                value={(overview.corr_regime || "unknown").replace("_", " ")}
+                sub={`mean |ρ| ${Number(overview.mean_abs_correlation ?? 0).toFixed(2)} · ${overview.n_bars_fitted ?? "—"} sessions`}
+              />
+            </div>
+
+            <p className="text-xs opacity-50 mb-4">
+              Kelly concentration = combined risk of each symbol&apos;s current
+              regime-gated Kelly sizing, accounting for correlation, divided by what
+              it would be if they were independent. &gt;1× means correlation
+              amplifies combined risk; &lt;1× means it dampens it. Correlation
+              regime measures how much symbols move <em>together</em>, independent
+              of market direction — an orderly bear market where everything falls
+              in lockstep can still read as &quot;crisis&quot; (that&apos;s the
+              diversification-collapse warning), same as a correlated rally would.
+            </p>
+
+            {(() => {
+              const byRegime = (overview.per_symbol || []).reduce((acc, p) => {
+                const key = p.regime || "unknown";
+                (acc[key] ||= []).push(p.symbol);
+                return acc;
+              }, {});
+              const nSymbols = overview.symbols.length || 1;
+              const kellyShare = overview.kelly_by_regime_share || {};
+              const rows = Object.entries(byRegime)
+                .map(([regime, syms]) => ({
+                  regime,
+                  syms,
+                  symbolShare: syms.length / nSymbols,
+                  kellyShare: kellyShare[regime] || 0,
+                }))
+                .sort((a, b) => b.kellyShare - a.kellyShare || b.syms.length - a.syms.length);
+
+              return (
+                <div className="mb-4">
+                  <h4 className="text-lg font-semibold mb-1">Risk concentration by regime</h4>
+                  <p className="text-xs opacity-50 mb-2">
+                    Where the plan&apos;s symbols and its Kelly-weighted risk budget actually sit right
+                    now. A regime holding far more risk share than symbol share means a few
+                    high-conviction bets are driving most of the exposure — that&apos;s the concentration
+                    a flat per-symbol table (see Analysis tab) doesn&apos;t surface on its own.
+                  </p>
+                  <div className="overflow-x-auto">
+                    <table className="table table-sm">
+                      <thead>
+                        <tr>
+                          <th>Regime</th>
+                          <th>Symbols</th>
+                          <th>Risk share</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map(({ regime, syms, symbolShare, kellyShare: ks }) => {
+                          const concentrated = ks > 0 && ks - symbolShare > 0.15;
+                          return (
+                            <tr key={regime}>
+                              <td className="text-xs capitalize whitespace-nowrap">{fmtRegime(regime)}</td>
+                              <td className="text-xs font-mono opacity-70">
+                                {syms.join(", ")}
+                                <span className="opacity-50"> ({syms.length})</span>
+                              </td>
+                              <td className="text-xs">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-20 bg-base-300 rounded h-2 shrink-0">
+                                    <div
+                                      className={`h-2 rounded ${concentrated ? "bg-warning" : "bg-secondary"}`}
+                                      style={{ width: `${ks * 100}%` }}
+                                    />
+                                  </div>
+                                  <span className="shrink-0">{(ks * 100).toFixed(0)}%</span>
+                                  {concentrated && (
+                                    <span className="badge badge-warning badge-xs" title="Holds notably more risk share than symbol share">
+                                      concentrated
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {overview.computed_at && (
+              <p className="text-xs opacity-50 mb-2">
+                as of {formatDate(overview.computed_at)}{overview.cached ? " · cached" : ""}
+                {overview.stale ? " · stale (last good result)" : ""}
+              </p>
+            )}
+
+            {(() => {
+              const pairs = [];
+              for (let i = 0; i < overview.symbols.length; i++) {
+                for (let j = i + 1; j < overview.symbols.length; j++) {
+                  const v = overview.correlation_matrix[i]?.[j];
+                  if (v != null) pairs.push({ a: overview.symbols[i], b: overview.symbols[j], v });
+                }
+              }
+              const mostConcentrated = [...pairs].sort((x, y) => y.v - x.v).slice(0, 3).filter((p) => p.v > 0.3);
+              const bestHedges = [...pairs].sort((x, y) => x.v - y.v).slice(0, 3).filter((p) => p.v < -0.1);
+
+              return (
+                <div className="mb-2">
+                  <h4 className="text-lg font-semibold mb-1">Correlation matrix</h4>
+                  <p className="text-xs opacity-50 mb-2">
+                    Correlation of daily price returns between symbol pairs — this is about shared
+                    price risk, not signal performance (that&apos;s Signal Health, in the Analysis
+                    tab). A red pair moves together: holding qualified signals on both is closer to
+                    one bet than two. A green pair offsets each other — a genuine hedge.
+                  </p>
+
+                  <div className="grid gap-3 sm:grid-cols-2 mb-3">
+                    <PairList
+                      title="Most concentrated"
+                      tone="error"
+                      pairs={mostConcentrated}
+                      valueFormatter={(p) => p.v.toFixed(2)}
+                      emptyLabel="No pair above 0.30"
+                    />
+                    <PairList
+                      title="Best hedges"
+                      tone="success"
+                      pairs={bestHedges}
+                      valueFormatter={(p) => p.v.toFixed(2)}
+                      emptyLabel="No pair below -0.10"
+                    />
+                  </div>
+
+                  <details>
+                    <summary className="text-xs font-semibold cursor-pointer opacity-80">
+                      Full matrix
+                    </summary>
+                    <div className="overflow-x-auto mt-2">
+                      <table className="border-collapse">
+                        <thead>
+                          <tr>
+                            <th className="text-xs p-1"></th>
+                            {overview.symbols.map((s) => (
+                              <th key={s} className="text-xs p-1 font-mono opacity-70">{s}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {overview.symbols.map((rowSym, i) => (
+                            <tr key={rowSym}>
+                              <th className="text-xs p-1 font-mono opacity-70 text-right">{rowSym}</th>
+                              {overview.symbols.map((colSym, j) => {
+                                const v = overview.correlation_matrix[i]?.[j];
+                                return (
+                                  <td
+                                    key={colSym}
+                                    title={`${rowSym} × ${colSym}: ${Number(v ?? 0).toFixed(3)}`}
+                                    className="text-center text-xs font-mono w-12 h-8"
+                                    style={{ backgroundColor: corrColor(v), color: "#fff" }}
+                                  >
+                                    {Number(v ?? 0).toFixed(2)}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="flex items-center gap-2 mt-3 text-xs opacity-60">
+                      <span>diversifying (-1)</span>
+                      <div
+                        className="h-2 w-40 rounded"
+                        style={{ background: `linear-gradient(to right, ${corrColor(-1)}, ${corrColor(0)}, ${corrColor(1)})` }}
+                      />
+                      <span>concentrated risk (+1)</span>
+                    </div>
+                  </details>
+                </div>
+              );
+            })()}
+          </>
+        )}
+
+        <div className="divider my-2" />
+
+        <h4 className="text-lg font-semibold mb-1">Concurrent-signal agreement</h4>
+        <p className="text-xs opacity-60 mb-2">
+          Direction agreement on days both symbols had a qualified signal — not
+          price correlation on every day.{agreement?.lookback_days ? ` Last ${agreement.lookback_days} days.` : ""}
+          {" "}Read it the same way as the correlation matrix: red pairs fire the same
+          direction almost every time (acting on both is closer to one bet than two);
+          green pairs tend to disagree.
+        </p>
+
+        {!loading && agreement?.error && !agreement?.agreement_matrix && (
+          <div className="alert alert-warning">
+            <span className="text-sm">{agreement.error}</span>
+          </div>
+        )}
+
+        {!loading && agreement?.agreement_matrix && agreement?.symbols && (
+          <>
+            {agreementPairs.length === 0 ? (
+              <p className="text-xs opacity-50 mb-3">
+                No symbol pair has enough concurrent qualified-signal days yet (need &ge;5) —
+                the matrix below is empty for now and fills in as more qualified signals accumulate.
+              </p>
+            ) : (
+              (() => {
+                const mostRedundant = [...agreementPairs].sort((x, y) => y.rate - x.rate).slice(0, 3).filter((p) => p.rate >= 0.7);
+                const mostComplementary = [...agreementPairs].sort((x, y) => x.rate - y.rate).slice(0, 3).filter((p) => p.rate <= 0.3);
+                return (
+                  <div className="grid gap-3 sm:grid-cols-2 mb-3">
+                    <PairList
+                      title="Most redundant"
+                      tone="error"
+                      pairs={mostRedundant}
+                      valueFormatter={(p) => `${(p.rate * 100).toFixed(0)}%`}
+                      emptyLabel="No pair at 70%+ agreement"
+                    />
+                    <PairList
+                      title="Most complementary"
+                      tone="success"
+                      pairs={mostComplementary}
+                      valueFormatter={(p) => `${(p.rate * 100).toFixed(0)}%`}
+                      emptyLabel="No pair at 30%- agreement"
+                    />
+                  </div>
+                );
+              })()
+            )}
+
+            <details>
+              <summary className="text-xs font-semibold cursor-pointer opacity-80">Full matrix</summary>
+              <div className="overflow-x-auto mt-2">
+                <table className="border-collapse">
+                  <thead>
+                    <tr>
+                      <th className="text-xs p-1"></th>
+                      {agreement.symbols.map((s) => (
+                        <th key={s} className="text-xs p-1 font-mono opacity-70">{s}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {agreement.symbols.map((rowSym, i) => (
+                      <tr key={rowSym}>
+                        <th className="text-xs p-1 font-mono opacity-70 text-right">{rowSym}</th>
+                        {agreement.symbols.map((colSym, j) => {
+                          const rate = agreement.agreement_matrix[i]?.[j];
+                          const overlapDays = agreement.overlap_days_matrix?.[i]?.[j] ?? 0;
+                          if (rate == null) {
+                            return (
+                              <td
+                                key={colSym}
+                                title={`${rowSym} × ${colSym}: only ${overlapDays} concurrent qualified-signal day(s), need >=5`}
+                                className="text-center text-xs font-mono w-12 h-8 bg-base-300 opacity-40"
+                              >
+                                —
+                              </td>
+                            );
+                          }
+                          return (
+                            <td
+                              key={colSym}
+                              title={`${rowSym} × ${colSym}: ${(rate * 100).toFixed(0)}% agreement over ${overlapDays} concurrent days`}
+                              className="text-center text-xs font-mono w-12 h-8"
+                              style={{ backgroundColor: agreementColor(rate), color: "#fff" }}
+                            >
+                              {(rate * 100).toFixed(0)}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex items-center gap-2 mt-3 text-xs opacity-60">
+                <span>always disagrees (0%)</span>
+                <div
+                  className="h-2 w-40 rounded"
+                  style={{ background: `linear-gradient(to right, ${agreementColor(0)}, ${agreementColor(0.5)}, ${agreementColor(1)})` }}
+                />
+                <span>always agrees (100%)</span>
+                <span className="ml-2 opacity-50">gray/dash = not enough concurrent days yet</span>
+              </div>
+            </details>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function DashboardPage() {
   // --- Toast state (driven by Realtime broadcast signal events) ---
@@ -1505,6 +1992,7 @@ export default function DashboardPage() {
               setRenkoBricks(j.renkoBricks ?? []);
               setSignalHealth(j.signalHealth ?? []);
               setCalibration(j.calibration ?? []);
+              setVsEqual(j.vsEqual ?? []);
               setIsLoading(false);
               // Inject new qualified signals into live state so the
               // toast handler fires for any that arrived since the
@@ -1746,6 +2234,7 @@ export default function DashboardPage() {
             {isPro && portfolioStats && <PortfolioStatsCard stats={portfolioStats} />}
           </Fragment>
         )}
+        {activeTab === "portfolio" && <SignalRiskCard isPro={isPro} />}
 
         <ToastContainer toasts={toasts} onDismiss={dismiss} copiedId={copiedId} />
       </div>

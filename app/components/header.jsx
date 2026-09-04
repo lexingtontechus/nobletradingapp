@@ -10,7 +10,7 @@ import {
   Show
 } from "@clerk/nextjs";
 import Link from "next/link";
-import LogoNTA from "./logonta";
+import Logo from "./logo";
 
 const IconAdmin = () => {
   return (
@@ -115,7 +115,7 @@ export default function Header() {
           href="/"
           className="inline-flex items-center gap-2 px-2 uppercase no-underline"
         >
-          <LogoNTA size={36} padding={0} />
+          <Logo size={36} padding={0}/>
           <span className="text-xl font-bold tracking-wide text-base-content">
             Noble Trading App
           </span>
@@ -124,7 +124,7 @@ export default function Header() {
       <div className=" flex-none ml-2 px-2">
         <Show when="signed-out">
           <SignInButton forceRedirectUrl="/dashboard" signinforceredirecturl="/dashboard" fallbackRedirectUrl="/dashboard" oauthFlow="popup">
-            <div className="btn btn-secondary rounded-full font-bold">
+            <div className="btn btn-secondary font-bold">
               Members
             </div>
           </SignInButton>

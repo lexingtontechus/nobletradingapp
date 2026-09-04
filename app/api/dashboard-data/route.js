@@ -105,6 +105,7 @@ export async function GET() {
       signalHealth: [],
       calibration: [],
       vsEqual: [],
+      vsEqualSymbol: [],
       portfolioStats: null,
       renkoBricks: [],
       symbols: [],
@@ -133,6 +134,7 @@ export async function GET() {
     symbolsRes,
     paperPositionsRes,
     paperEquityRes,
+    vsEqualSymbolRes,
   ] = await Promise.all([
     supabase.from("v_talaria_latest_signals").select("*"),
     supabase.from("v_talaria_signal_health").select("*"),
@@ -146,8 +148,9 @@ export async function GET() {
     // by intersecting against the symbol list from v_talaria_symbols.
     supabase.from("v_talaria_symbols").select("*").contains("plan_ids", [planUuid]),
     isPro ? supabase.from("v_paper_positions").select("*") : { data: [] },
-    isPro ? supabase.from("v_paper_equity").select("*") : { data: [] },
-  ]);
+ isPro ? supabase.from("v_paper_equity").select("*") : { data: [] },
+ isPro ? supabase.from("v_paper_vs_optimized_symbol").select("*") : { data: [] },
+ ]);
 
   // Plan-gating: v_talaria_symbols returns the plan-scoped roster (10 for
   // Signal Scout, 20 for Precision Pro). Filter sweeps + renko to only include
@@ -164,6 +167,7 @@ export async function GET() {
     signalHealth: safeData(healthRes),
     calibration: safeData(calibrationRes),
     vsEqual: isPro ? safeData(vsEqualRes) : [],
+    vsEqualSymbol: isPro ? safeData(vsEqualSymbolRes) : [],
     portfolioStats: isPro ? safeSingle(portfolioRes) : null,
     renkoBricks: filteredRenko,
     symbols: symbolsData,
