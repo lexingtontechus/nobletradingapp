@@ -339,7 +339,7 @@ function HotSignalsBanner({ signals }) {
 function TabBar({ active, onChange }) {
   return (
     <div className="tabs tabs-border mb-4">
-      {["market", "analysis", "portfolio"].map((tab) => (
+      {["market", "analysis", "portfolio", "eod"].map((tab) => (
         <button
           key={tab}
           className={
@@ -354,7 +354,9 @@ function TabBar({ active, onChange }) {
             ? "Market"
             : tab === "analysis"
               ? "Analysis"
-              : "Portfolio"}
+              : tab === "portfolio"
+                ? "Portfolio"
+                : "EOD Report"}
         </button>
       ))}
     </div>
@@ -1851,6 +1853,146 @@ function SignalRiskCard({ isPro }) {
   );
 }
 
+// EOD Signal Accuracy Report — see docs/worklog-eod-signal-accuracy-report.md.
+// This validates the historical accuracy/precision of Talaria's qualified
+// signals (predicted vs. realized outcome) — it is explicitly NOT trading or
+// investment advice, hence the persistent disclaimer banner below rather than
+// a dismissable one. Reads a report built once at end-of-day
+// (app/lib/eod-report/build.js via /api/eod-report/generate) — this route
+// never triggers generation itself, so loading this tab never calls an LLM.
+function EodReportView() {
+  const [report, setReport] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/eod-report");
+      setReport(await res.json());
+    } catch (e) {
+      setReport({ error: String(e) });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const stats = report?.stats;
+  const statusToneClass = (status) =>
+    status === "OVERCONFIDENT" ? "badge-warning" : status === "CALIBRATED" ? "badge-success" : "badge-ghost";
+
+  return (
+    <div className="card bg-base-100 shadow border border-base-300 mb-6">
+      <div className="card-body">
+        <h3 className="card-title text-lg">EOD Signal Accuracy Report</h3>
+
+        <div className="alert alert-warning mb-3">
+          <span className="text-xs">
+            This report validates the historical accuracy of Talaria&apos;s qualified signals —
+            predicted vs. realized outcomes. It is <strong>not</strong> trading or investment
+            advice and does not recommend any action. See the{" "}
+            <Link href="/disclaimer" className="link">disclaimer</Link>.
+          </span>
+        </div>
+
+        {loading && <div className="opacity-60 text-sm py-6 text-center">Loading…</div>}
+
+        {!loading && report?.not_generated && (
+          <p className="text-sm opacity-60">{report.message}</p>
+        )}
+
+        {!loading && report?.error && !stats && (
+          <div className="alert alert-warning">
+            <span className="text-sm">{report.error}</span>
+          </div>
+        )}
+
+        {!loading && stats && (
+          <>
+            <p className="text-xs opacity-50 mb-3">
+              Report for {report.report_date}
+              {report.generated_at ? ` · generated ${formatDate(report.generated_at)}` : ""}
+              {report.llm_provider ? ` · commentary via ${report.llm_provider}` : ""}
+            </p>
+
+            {report.digest_summary && (
+              <p className="text-sm mb-4 italic opacity-90">{report.digest_summary}</p>
+            )}
+
+            <div className="grid gap-3 sm:grid-cols-4 mb-3">
+              <StatCard title="New signals" value={String(stats.n_new)} sub="qualified today" />
+              <StatCard
+                title="Resolved"
+                value={String(stats.n_resolved)}
+                sub={`${stats.n_tp} TP · ${stats.n_sl} SL · ${stats.n_expired} expired`}
+              />
+              <StatCard
+                title="Realized win rate"
+                value={stats.realized_win_rate != null ? (stats.realized_win_rate * 100).toFixed(1) + "%" : "—"}
+                sub="today's resolved signals"
+              />
+              <StatCard
+                title="Fixed-risk benchmark"
+                value={stats.benchmark_today != null ? "$" + stats.benchmark_today.toFixed(2) : "—"}
+                sub={stats.benchmark_cumulative != null ? `cumulative $${stats.benchmark_cumulative.toFixed(2)} all-time` : "no signals resolved today"}
+                tone={stats.benchmark_today == null ? undefined : stats.benchmark_today >= 0 ? "pos" : "neg"}
+              />
+            </div>
+            <p className="text-xs opacity-50 mb-4">
+              Fixed-risk benchmark = aggregate P&amp;L across every resolved qualified signal if
+              each risked a fixed $10 — a comparability benchmark, not a single-account balance.
+            </p>
+
+            <div className="grid gap-3 sm:grid-cols-4 mb-4">
+              <StatCard title="Overconfident" value={String(stats.n_overconfident)} sub={`of ${stats.n_symbols_tracked} tracked`} tone={stats.n_overconfident > 0 ? "neg" : undefined} />
+              <StatCard title="Calibrated" value={String(stats.n_calibrated)} sub={`of ${stats.n_symbols_tracked} tracked`} tone="pos" />
+              <StatCard title="Underconfident" value={String(stats.n_underconfident)} sub={`of ${stats.n_symbols_tracked} tracked`} />
+              <StatCard
+                title="7-day rollup"
+                value={stats.weekly_avg_realized != null ? (stats.weekly_avg_realized * 100).toFixed(1) + "%" : "—"}
+                sub={`realized vs ${stats.weekly_avg_predicted != null ? (stats.weekly_avg_predicted * 100).toFixed(1) + "%" : "—"} predicted (n=${stats.weekly_n})`}
+              />
+            </div>
+
+            <h4 className="text-sm font-semibold mb-2">Per-symbol accuracy</h4>
+            <div className="space-y-3">
+              {(report.per_symbol || []).map((s) => (
+                <div key={s.symbol} className="border-b border-base-300 pb-2 last:border-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <span className="font-mono font-semibold text-sm">{s.symbol}</span>
+                    {s.new_signal && <span className="badge badge-sm badge-ghost">new: {s.new_signal.signal}</span>}
+                    {s.resolved && (
+                      <span className="badge badge-sm badge-ghost">
+                        resolved: {s.resolved.n_tp}TP/{s.resolved.n_sl}SL/{s.resolved.n_expired}EXP
+                      </span>
+                    )}
+                    {s.calibration && (
+                      <span className={`badge badge-sm ${statusToneClass(s.calibration.status)}`}>
+                        {s.calibration.status}
+                      </span>
+                    )}
+                  </div>
+                  {s.commentary ? (
+                    <p className="text-xs opacity-70">{s.commentary}</p>
+                  ) : (
+                    <p className="text-xs opacity-40">Commentary unavailable for this symbol.</p>
+                  )}
+                </div>
+              ))}
+              {(!report.per_symbol || report.per_symbol.length === 0) && (
+                <p className="text-xs opacity-50">No qualified signal activity today.</p>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   // --- Toast state (driven by Realtime broadcast signal events) ---
   const { toasts, pushToast, dismiss, copyToast, copiedId } = useToasts();
@@ -2278,6 +2420,7 @@ export default function DashboardPage() {
           </Fragment>
         )}
         {activeTab === "portfolio" && <SignalRiskCard isPro={isPro} />}
+        {activeTab === "eod" && <EodReportView />}
 
         <ToastContainer toasts={toasts} onDismiss={dismiss} copiedId={copiedId} />
       </div>

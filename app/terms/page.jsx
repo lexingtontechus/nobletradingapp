@@ -1,10 +1,12 @@
 export default function Terms() {
   return (
     <div className="container p-8 mx-auto py-2">
-      <div className="my-2">
-        <h1 className="text-xl font-semibold my-2">
-          Last Updated © Jan 01,{new Date().getFullYear()} - All right reserved
+      <div className="py-4">
+        <h1 className="text-2xl font-bold py-2">TERMS
         </h1>
+        <h2 className="text-xl font-semibold my-2">
+          Last Updated © Jan 01,{new Date().getFullYear()} - All right reserved
+        </h2>
         This website is operated by Noble Trading App, a property of Noble
         Trading App, LLC. Throughout the site and associated services, the terms
         “we”, “us”, and “our” refer to Noble Trading. Noble Trading offers this
@@ -14,7 +16,7 @@ export default function Terms() {
         "yourself"). By accessing or using any part of the site, Apps, or
         Discord bot, you agree to be bound by these Terms of Service.
       </div>
-      <div>
+      <div className="py-2">
         These Terms of Service apply to all users of the platform, including
         browsers, vendors, customers, merchants, and contributors of content.
         Please read these Terms of Service carefully before accessing or using
@@ -24,7 +26,7 @@ export default function Terms() {
         considered an offer, acceptance is expressly limited to these Terms of
         Service ("Terms").
       </div>
-      <div>
+      <div className="py-2">
         Any new features or tools added to the current subscriptions, including
         those integrated into the website, Apps, or Discord bot, shall also be
         subject to the Terms of Service. You can review the most current version
@@ -35,12 +37,12 @@ export default function Terms() {
         access to the website, Apps, or Discord bot following the posting of any
         changes constitutes acceptance of those changes.
       </div>
-      <div>
+      <div className="py-2">
         By agreeing to these Terms of Service, you represent that you are at
         least the age of majority in your state or province of residence, or
         that you are the age of majority in your state or province of residence.
       </div>
-      <div>
+      <div className="py-2">
         You may not use our products for any illegal, against any market
         regulations, or unauthorized purpose nor may you, in the use of the
         Service, violate any laws or regulations in your jurisdiction (including

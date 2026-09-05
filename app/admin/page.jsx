@@ -18,6 +18,8 @@ import WidgetPaymentsPrecisionProChart from "./widget_payments_precisionpro_char
 //Tab - Customers
 import WidgetCustomersChart from "./widget_customers_chart";
 
+import EodReportTrigger from "./eod-report-trigger";
+
 export default async function Admin() {
   await auth.protect();
    const { has } = await auth();
@@ -48,6 +50,7 @@ export default async function Admin() {
               <WidgetCustomersSummary />
               <WidgetPaymentsSummary />
               <WidgetPaymentsChart />
+              <EodReportTrigger />
             </div>
           </div>
         </div>
