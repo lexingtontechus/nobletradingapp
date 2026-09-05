@@ -14,7 +14,7 @@ export default function Home() {
         <div className="hero-content mx-auto max-w-5xl text-center py-20">
           <div>
             <h1 className="text-4xl md:text-5xl font-bold">
-              Live trading signals, docked beside your agent chat.
+              Live market signals, docked beside your agent chat.
             </h1>
             <p className="text-xl opacity-70 mt-6 max-w-3xl mx-auto">
               Talaria is the Noble Trading signal that lives inside
@@ -123,8 +123,7 @@ export default function Home() {
               <p>
                 A 30-day signal health scoreboard — win rate, calibration bias,
                 and profit factor — plus signal science per symbol: Markov
-                probability, brick-pattern analysis, and a sizing what-if. On
-                Precision Pro, a paper portfolio with Sharpe, Sortino, Calmar,
+                probability, brick-pattern analysis, and a sizing what-if. A paper portfolio with Sharpe, Sortino, Calmar,
                 and max drawdown.
               </p>
             </div>
@@ -149,7 +148,7 @@ export default function Home() {
                 $199 <span className="text-base opacity-70">/ month</span>
               </div>
               <p>
-                Ten curated symbols, quality-gated signals, and the full Talaria
+                Ten+ curated symbols, quality-gated signals, and the full Talaria
                 dashboard — plus community access. The engine does the
                 screening, so you only see qualified, high-confidence signals.
               </p>
@@ -162,10 +161,10 @@ export default function Home() {
                 <span className="badge badge-secondary">Most Popular</span>
               </div>
               <div className="text-3xl font-bold">
-                $599 <span className="text-base opacity-70">/ month</span>
+                $499 <span className="text-base opacity-70">/ month</span>
               </div>
               <p>
-                The Talaria Signals — 20 curated symbols, live alerts, and
+                Twenty+ curated symbols, live alerts, and
                 advanced analytics, including a simulated paper portfolio with a
                 full risk-adjusted tear-sheet.
               </p>

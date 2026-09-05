@@ -1,6 +1,6 @@
 export default function Terms() {
   return (
-    <div className="container p-8 mx-auto py-2">
+    <div className="container p-8 mx-auto py-2 normal-case">
       <div className="py-4">
         <h1 className="text-2xl font-bold py-2">TERMS
         </h1>

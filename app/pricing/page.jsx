@@ -41,9 +41,9 @@ const PLAN_COPY = {
   scout: {
     badge: "The on-ramp",
     tagline:
-      "A focused watchlist of ten markets — quality-gated signals, the full Talaria dashboard, and the reasoning behind every call.",
+      "A focused watchlist of ten markets — quality-gated signals & the full Talaria dashboard.",
     features: [
-      "Ten curated symbols — a watchlist you can actually watch",
+      "Ten+ curated symbols — a watchlist you can actually watch",
       "Quality-gated signals with entry, stop & take-profit on every call",
       "Live Renko brick charts in the Talaria dashboard",
       "Market-regime labels on every signal",
@@ -59,7 +59,7 @@ const PLAN_COPY = {
       "Talaria signals, twenty curated symbols, live alerts and the analytics to verify the edge.",
     features: [
       "Everything in Signal Scout, plus:",
-      "Twenty curated symbols — double the Scout watchlist",
+      "Twenty+ curated symbols — double the Scout watchlist",
       "Talaria watches markets around the clock",
       "Paper portfolio: daily equity curve, realized PnL & R-multiple",
       "Portfolio analytics — Sharpe, Sortino, Calmar, drawdown & more",

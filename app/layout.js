@@ -58,7 +58,7 @@ export default function RootLayout({ children }) {
     >
       <html lang="en">
         <body
-          className={`${publicSans.variable} ${cormorantSc.variable} ${ibmPlexMono.variable} capitalize antialiased`}
+          className={`${publicSans.variable} ${cormorantSc.variable} ${ibmPlexMono.variable} antialiased`}
         >
           <Header />
           {children}

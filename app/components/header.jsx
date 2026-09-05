@@ -131,7 +131,7 @@ export default function Header() {
         </Show>
         <Show when="signed-in">
           {/* <UserButton />*/}
-          <UserButton>
+          <UserButton className="normal-case">
             {/* user?.publicMetadata.role == "admin" &&) */}
             <UserButton.MenuItems>
               {isAdmin && (
