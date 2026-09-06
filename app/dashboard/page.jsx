@@ -295,6 +295,7 @@ function HotSignalsBanner({ signals }) {
   }, 0);
 
   return (
+    <div className="aura aura-gold">
     <div className="card bg-base-300 shadow border border-base-300 mb-6">
       <div className="card-body py-3">
         <div className="flex items-center justify-between flex-wrap gap-x-3 gap-y-1">
@@ -332,7 +333,9 @@ function HotSignalsBanner({ signals }) {
         </div>
       </div>
     </div>
+    </div>
   );
+
 }
 
 // Tab bar using daisyUI classes (mirrors tla-tabs).
@@ -2105,10 +2108,18 @@ export default function DashboardPage() {
     supabaseRef.current = supabase;
 
     // Subscribe to the plan-scoped signal broadcast channel.
-    // The fastapi backend broadcasts on `realtime:signals.<plan_slug>` topics,
-    // each carrying `{ type: "signal", payload: <signal_object> }`.
+    // The fastapi backend broadcasts (raw Phoenix websocket, see
+    // realtime_publisher.py) on the LITERAL topic `realtime:signals.<plan_slug>`.
+    // supabase-js's client.channel(topic) prepends "realtime:" to whatever
+    // you pass it (see @supabase/realtime-js RealtimeClient.channel()) — so
+    // the argument here must be the topic WITHOUT that prefix, or the client
+    // ends up joining "realtime:realtime:signals.<plan_slug>" and silently
+    // never receives anything the backend sends (verified live: this was
+    // the actual bug — toasts never fired because of this double-prefix,
+    // not because broadcasting itself was broken).
+    const topic = `signals.${planSlug}`;
     const channel = supabase
-      .channel(`realtime:signals.${planSlug}`)
+      .channel(topic)
       .on("broadcast", { event: "signal" }, (payload) => {
         const signal = payload?.payload ?? payload;
         if (!signal) return;
@@ -2116,15 +2127,17 @@ export default function DashboardPage() {
         console.log("[dashboard:realtime] signal received:", {
           symbol: signal.symbol,
           plan: planSlug,
-          channel: `realtime:signals.${planSlug}`,
+          topic,
           signal,
         });
 
         const isSell = String(signal?.signal || signal?.direction || "").toLowerCase() === "sell";
         const direction = isSell ? "SELL" : "BUY";
-        const kellyLabel = signal.effective_kelly
-          ? `k${Number(signal.effective_kelly).toFixed(2)}`
-          : "";
+        // Backend payload field is `kelly` (build_signal_payload in
+        // realtime_publisher.py), not `effective_kelly` — this broadcast is
+        // a lean, price-focused payload and does not include regime/EV at
+        // all (unlike the REST sweep rows the rest of the dashboard reads).
+        const kellyLabel = signal.kelly != null ? `k${Number(signal.kelly).toFixed(2)}` : "";
 
         // Add to live signals state (replaces/adds to sweep list)
         setLiveSignals((prev) => {
@@ -2136,14 +2149,14 @@ export default function DashboardPage() {
         // Include entry/SL/TP so the user can copy the full trade setup
         pushToast({
           title: `${signal.symbol} ${direction}`,
-          body: `${fmtRegime(signal.regime)} · ${kellyLabel} · EV ${fmtUsd(signal.ev)} · ENTRY ${fmtBrickPriceUsd(signal.entry_price)} · SL ${fmtBrickPriceUsd(signal.stop_loss)} · TP ${fmtBrickPriceUsd(signal.take_profit)}`,
-          tone: signal.ev >= 0 ? "pos" : "neg",
+          body: `${kellyLabel ? kellyLabel + " · " : ""}ENTRY ${fmtBrickPriceUsd(signal.entry_price)} · SL ${fmtBrickPriceUsd(signal.stop_loss)} · TP ${fmtBrickPriceUsd(signal.take_profit)}`,
+          tone: "info",
           copyable: true,
-          copyText: `${signal.symbol} ${direction}\nEntry: ${fmtBrickPriceUsd(signal.entry_price)}\nSL: ${fmtBrickPriceUsd(signal.stop_loss)}\nTP: ${fmtBrickPriceUsd(signal.take_profit)}\nRegime: ${fmtRegime(signal.regime)}\nkelly: ${kellyLabel}\nEV: ${fmtUsd(signal.ev)}`,
+          copyText: `${signal.symbol} ${direction}\nEntry: ${fmtBrickPriceUsd(signal.entry_price)}\nSL: ${fmtBrickPriceUsd(signal.stop_loss)}\nTP: ${fmtBrickPriceUsd(signal.take_profit)}${kellyLabel ? `\nkelly: ${kellyLabel}` : ""}`,
         });
       })
       .subscribe((status) => {
-        console.log("[dashboard:realtime] subscribe status:", status, "plan:", planSlug, "channel:", `realtime:signals.${planSlug}`);
+        console.log("[dashboard:realtime] subscribe status:", status, "plan:", planSlug, "topic:", topic);
         // Only downgrade to "connecting" on explicit connection drop states,
         // not on intermediate states like "OPEN" that fire during the
         // SUBSCRIBED lifecycle. This prevents the realtime card from
