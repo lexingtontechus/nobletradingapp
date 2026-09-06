@@ -32,88 +32,170 @@ import { useUser } from "@clerk/nextjs";
 import { TalariaMark } from "../components/talaria-mark";
 import { createClient } from "@/utils/supabase/client";
 
-// -- Toast state --
-// daisyUI toast pattern: <div className="toast toast-top toast-end"> with
-// <div className="alert ..."> children. Toasts are driven by Realtime broadcast
-// signal events (mirrors the plugin's signalStore.addSignal → toast flow).
-function useToasts() {
-  const [toasts, setToasts] = useState([]);
+// -- Floating live-signals widget --
+// Replaces the old toast-per-signal + HotSignalsBanner pair (2026-09-06):
+// the toast (small, pale alert-info, 8s auto-dismiss) was hard to read/copy
+// before it vanished, and the banner sourced from `sweeps` (the raw latest-
+// sweep-per-symbol snapshot) — a symbol that flips qualified=false on the
+// very next sweep tick disappeared from the banner instantly, with no
+// memory that it had just fired. Mirrors the Talaria desktop plugin's
+// chip+pane pattern (noble-trader-hermes-plugins/talaria/desktop/plugin.js,
+// signalStore/TalariaSignalsPane/TalariaChip): a persistent floating card,
+// fed by `liveSignals` (the realtime-broadcast + poll accumulator, already
+// qualified-only) filtered to a rolling TTL window instead of "still true
+// on the very latest fetch" — so a signal stays visible for a while after
+// it fires, not just for one snapshot.
+const SIGNAL_WIDGET_TTL_MS = 60 * 60 * 1000; // 1h, matches the plugin's SIGNAL_TTL_MS
 
-  const [copiedId, setCopiedId] = useState(null);
+function signalEpochMs(s) {
+  if (s?.ts != null) return typeof s.ts === "number" ? s.ts * 1000 : Date.parse(s.ts) || 0;
+  if (s?.sweep_timestamp) return Date.parse(s.sweep_timestamp) || 0;
+  return 0;
+}
 
-  const pushToast = useCallback((toast) => {
-    const id = Date.now() + Math.random();
-    setToasts((prev) => [...prev, { ...toast, id }]);
-    // Auto-dismiss after TTL (default 8s, matching plugin's toast TTL)
-    const ttl = toast.ttl ?? 8000;
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, ttl);
+// `now` is passed in (state, updated from an effect) rather than called via
+// Date.now() here — react-hooks/purity (an enforced error in this project,
+// not just a style warning) flags any impure call like Date.now()/new Date()
+// made directly during render, including inside helpers a render calls.
+function fmtSignalAge(epochMs, now) {
+  if (!epochMs || !now) return "";
+  const diffMin = Math.floor(Math.max(0, now - epochMs) / 60000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  return `${Math.floor(diffMin / 60)}h ${diffMin % 60}m ago`;
+}
+
+function FloatingSignalsWidget({ signals }) {
+  const [open, setOpen] = useState(false);
+  const [copiedKey, setCopiedKey] = useState(null);
+  // 0 until the first effect tick — render must never call Date.now() itself
+  // (react-hooks/purity). The gap is one paint at most; effects run right
+  // after mount.
+  const [now, setNow] = useState(0);
+  const prevCountRef = useRef(0);
+
+  // Set "now" once on mount, then every 30s so ages + TTL expiry stay
+  // current even with no new signal data.
+  useEffect(() => {
+    setNow(Date.now());
+    const t = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(t);
   }, []);
 
-  const dismiss = (id) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  };
+  const rows = now
+    ? (signals || [])
+        .map((s) => ({ ...s, _epoch: signalEpochMs(s) }))
+        .filter((s) => s._epoch > 0 && now - s._epoch <= SIGNAL_WIDGET_TTL_MS)
+        .sort((a, b) => b._epoch - a._epoch)
+        .slice(0, 12)
+    : [];
 
-  // Copy signal prices to clipboard and show a brief confirmation
-  const copyToast = async (id, copyText) => {
-    if (!copyText) return;
+  // Auto-open when a genuinely new signal arrives (row count increases).
+  useEffect(() => {
+    if (rows.length > prevCountRef.current) setOpen(true);
+    prevCountRef.current = rows.length;
+  }, [rows.length]);
+
+  const copy = async (key, text) => {
     try {
-      await navigator.clipboard.writeText(copyText);
-      setCopiedId(id);
-      setTimeout(() => setCopiedId(null), 2000);
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey((k) => (k === key ? null : k)), 1500);
     } catch {
-      // Fallback: select the text in a textarea
+      // Clipboard write can fail (permissions/insecure context) — button
+      // just won't flash "copied"; not worth a fallback UI for this.
     }
   };
 
-  return { toasts, pushToast, dismiss, copyToast, copiedId };
-}
-
-// ToastContainer renders daisyUI toast markup at the top-right corner
-function ToastContainer({ toasts, onDismiss, copiedId }) {
-  if (!toasts.length) return null;
   return (
-    <div className="toast toast-top toast-end">
-      {toasts.map((t) => {
-        const isCopyable = t.copyable && t.copyText;
-        return (
-          <div
-            key={t.id}
-            className={`alert alert-sm shadow-lg max-w-xs ${
-              t.tone === "pos"
-                ? "alert-success"
-                : t.tone === "neg"
-                  ? "alert-error"
-                  : t.tone === "warn"
-                    ? "alert-warning"
-                    : "alert-info"
-            }`}
-          >
-            <div className="flex-1">
-              <div className="text-sm font-semibold">{t.title}</div>
-              <div className="text-xs opacity-80 whitespace-pre-line">{t.body}</div>
-            </div>
-            <div className="flex flex-col gap-1">
-              {isCopyable && (
-                <button
-                  className={"btn btn-ghost btn-xs " + (copiedId === t.id ? "btn-success" : "")}
-                  onClick={() => copyToast(t.id, t.copyText)}
-                  title="Copy signal prices"
-                >
-                  {copiedId === t.id ? "✓ Copied" : "📋 Copy"}
-                </button>
-              )}
-              <button
-                className="btn btn-ghost btn-xs btn-circle"
-                onClick={() => onDismiss(t.id)}
-              >
+    <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2">
+      {open && (
+        <div className="w-80 max-h-[70vh] flex flex-col bg-base-300 border border-base-content/20 rounded-md shadow-xl overflow-hidden p-2">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-base-content/10">
+            <span className="font-semibold text-sm">Talaria Live Signals</span>
+            <div className="flex items-center gap-2">
+              {rows.length > 0 && <span className="badge badge-primary badge-sm">{rows.length} live</span>}
+              <button className="btn btn-ghost btn-xs btn-circle" onClick={() => setOpen(false)} title="Collapse">
                 ✕
               </button>
             </div>
           </div>
-        );
-      })}
+          <p className="text-[11px] opacity-60 px-3 pt-2">
+            <span className="font-mono">k</span> = Kelly fraction — suggested risk as a share of capital,
+            not investment advice. Signals stay listed for up to 1h after firing.
+          </p>
+          <div className="overflow-y-auto flex-1 divide-y divide-base-content/10 mt-1">
+            {rows.length === 0 && (
+              <p className="text-xs opacity-50 p-3">No qualified signals in the last hour.</p>
+            )}
+            {rows.map((s) => {
+              const isSell = String(s.signal || s.direction || "").toLowerCase() === "sell";
+              const dir = isSell ? "SELL" : "BUY";
+              const kelly = s.kelly ?? s.effective_kelly;
+              const rowKey = `${s.symbol}-${s._epoch}`;
+              const fullText =
+                `${s.symbol} ${dir}\nEntry: ${fmtBrickPriceUsd(s.entry_price)}\n` +
+                `SL: ${fmtBrickPriceUsd(s.stop_loss)}\nTP: ${fmtBrickPriceUsd(s.take_profit)}`;
+              return (
+                <div key={rowKey} className="px-3 py-2 text-xs">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <span className="font-mono font-semibold">{s.symbol}</span>
+                    <span className={`badge badge-xs ${isSell ? "badge-error" : "badge-success"}`}>{dir}</span>
+                    {kelly != null && <span className="opacity-60">k{Number(kelly).toFixed(2)}</span>}
+                    <span className="opacity-40 ml-auto">{fmtSignalAge(s._epoch, now)}</span>
+                  </div>
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {[
+                      // Same color convention as the Renko chart's price levels
+                      // (generateBricks levels, ~line 474-478): ENTRY neutral,
+                      // SL red, TP green — position-based (risk vs. target),
+                      // not flipped by buy/sell direction.
+                      ["ENTRY", s.entry_price, "text-base-content/70"],
+                      ["SL", s.stop_loss, "text-error"],
+                      ["TP", s.take_profit, "text-success"],
+                    ].map(([label, val, colorClass]) =>
+                      val != null ? (
+                        <button
+                          key={label}
+                          className={`btn btn-ghost btn-xs gap-1 font-mono ${colorClass}`}
+                          onClick={() => copy(`${rowKey}-${label}`, String(val))}
+                          title={`Copy ${label} (${val})`}
+                        >
+                          {label} {fmtBrickPriceUsd(val)}
+                          <span className="opacity-50">{copiedKey === `${rowKey}-${label}` ? "✓" : "⧉"}</span>
+                        </button>
+                      ) : null
+                    )}
+                    <button
+                      className="btn btn-ghost btn-xs ml-auto"
+                      onClick={() => copy(`${rowKey}-all`, fullText)}
+                    >
+                      {copiedKey === `${rowKey}-all` ? "✓ Copied" : "Copy all"}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="px-3 py-1.5 text-[10px] opacity-40 border-t border-base-content/10">
+            {now > 0 && (
+              <>as of {new Date(now).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</>
+            )}
+          </div>
+        </div>
+      )}
+      <button
+        className="btn btn-circle btn-outline hover:btn-neutral"
+        onClick={() => setOpen((v) => !v)}
+        title="Talaria Live Signals"
+      >
+        <span className="relative flex items-center justify-center">
+          <TalariaMark size={22} />
+          {rows.length > 0 && (
+            <span className="absolute -top-3 -right-3 badge badge-error badge-xs">{rows.length}</span>
+          )}
+        </span>
+      </button>
     </div>
   );
 }
@@ -283,59 +365,6 @@ function StatCard({ title, value, sub, tone, valueClassName }) {
       </div>
     </div>
   );
-}
-
-function HotSignalsBanner({ signals }) {
-  const hot = (signals || []).filter((s) => s.qualified);
-  if (hot.length === 0) return null;
-
-  const latestTs = hot.reduce((max, s) => {
-    const t = s.sweep_timestamp ? new Date(s.sweep_timestamp).getTime() : 0;
-    return t > max ? t : max;
-  }, 0);
-
-  return (
-    <div className="aura aura-gold">
-    <div className="card bg-base-300 shadow border border-base-300 mb-6">
-      <div className="card-body py-3">
-        <div className="flex items-center justify-between flex-wrap gap-x-3 gap-y-1">
-          <h2 className="card-title">Talaria Live Signals</h2>
-          {latestTs > 0 && (
-            <span className="text-xs opacity-60">
-              as of {new Date(latestTs).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
-            </span>
-          )}
-        </div>
-        <p className="text-xs opacity-60 -mt-1 mb-2">
-          <span className="font-mono">k</span> = Kelly fraction — the model&apos;s suggested position
-          size as a share of your risk capital, e.g. <span className="font-mono">k0.03</span> suggests
-          risking about 3% of capital on that trade (not 3% of your whole account balance). Higher k
-          means higher model conviction. A sizing suggestion, not investment advice.
-        </p>
-        <div className="flex items-center gap-2 flex-wrap">
-          {hot.map((s) => {
-            const isSell = String(s.signal || s.direction || "").toLowerCase() === "sell";
-            const isBuy = !isSell;
-            const kellyPct = (s.effective_kelly * 100).toFixed(1);
-            return (
-              <span
-                key={s.symbol}
-                className={
-                  "badge text-xs font-mono " +
-                  (isSell ? "badge-error" : "badge-success")
-                }
-                title={`${s.symbol} ${isSell ? "Sell" : "Buy"} · entry ${fmtBrickPriceUsd(s.entry_price)} · SL ${fmtBrickPriceUsd(s.stop_loss)} · TP ${fmtBrickPriceUsd(s.take_profit)} · Kelly ${s.effective_kelly.toFixed(3)} (risk ≈${kellyPct}% of capital) · ${fmtRegime(s.regime)}`}
-              >
-                {s.symbol} {isSell ? "SELL" : "BUY"} · k{s.effective_kelly.toFixed(2)}
-              </span>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-    </div>
-  );
-
 }
 
 // Tab bar using daisyUI classes (mirrors tla-tabs).
@@ -1997,9 +2026,6 @@ function EodReportView() {
 }
 
 export default function DashboardPage() {
-  // --- Toast state (driven by Realtime broadcast signal events) ---
-  const { toasts, pushToast, dismiss, copyToast, copiedId } = useToasts();
-
   // --- Realtime subscription state ---
   // The plugin uses a raw Phoenix WebSocket to subscribe to broadcast channels
   // like `realtime:signals.<plan_slug>`. We use the Supabase JS client's
@@ -2131,28 +2157,12 @@ export default function DashboardPage() {
           signal,
         });
 
-        const isSell = String(signal?.signal || signal?.direction || "").toLowerCase() === "sell";
-        const direction = isSell ? "SELL" : "BUY";
-        // Backend payload field is `kelly` (build_signal_payload in
-        // realtime_publisher.py), not `effective_kelly` — this broadcast is
-        // a lean, price-focused payload and does not include regime/EV at
-        // all (unlike the REST sweep rows the rest of the dashboard reads).
-        const kellyLabel = signal.kelly != null ? `k${Number(signal.kelly).toFixed(2)}` : "";
-
-        // Add to live signals state (replaces/adds to sweep list)
+        // Add to live signals state — FloatingSignalsWidget renders from this
+        // directly (TTL-windowed) and auto-opens when the count increases, so
+        // no separate toast dispatch is needed here.
         setLiveSignals((prev) => {
           const filtered = prev.filter((s) => s.symbol !== signal.symbol);
           return [signal, ...filtered];
-        });
-
-        // Fire a daisyUI toast (mirrors plugin's signalStore → toast flow)
-        // Include entry/SL/TP so the user can copy the full trade setup
-        pushToast({
-          title: `${signal.symbol} ${direction}`,
-          body: `${kellyLabel ? kellyLabel + " · " : ""}ENTRY ${fmtBrickPriceUsd(signal.entry_price)} · SL ${fmtBrickPriceUsd(signal.stop_loss)} · TP ${fmtBrickPriceUsd(signal.take_profit)}`,
-          tone: "info",
-          copyable: true,
-          copyText: `${signal.symbol} ${direction}\nEntry: ${fmtBrickPriceUsd(signal.entry_price)}\nSL: ${fmtBrickPriceUsd(signal.stop_loss)}\nTP: ${fmtBrickPriceUsd(signal.take_profit)}${kellyLabel ? `\nkelly: ${kellyLabel}` : ""}`,
         });
       })
       .subscribe((status) => {
@@ -2217,7 +2227,7 @@ export default function DashboardPage() {
       clearInterval(pollTimer);
       supabase.removeChannel(channel);
     };
-  }, [planSlug, pushToast]);
+  }, [planSlug]);
 
   // Show a brief loading state while we check the plan status
   if (clerkLoaded && isSignedIn && !statusChecked) {
@@ -2302,9 +2312,6 @@ export default function DashboardPage() {
             </span>
           </div>
         )}
-
-        {/* Hot signals banner (driven by Realtime signals) */}
-        <HotSignalsBanner signals={sweeps} />
 
         {/* Stat card grid (3 cols) — mirrors tla-grid */}
         <div className="grid gap-4 md:grid-cols-3">
@@ -2435,7 +2442,7 @@ export default function DashboardPage() {
         {activeTab === "portfolio" && <SignalRiskCard isPro={isPro} />}
         {activeTab === "eod" && <EodReportView />}
 
-        <ToastContainer toasts={toasts} onDismiss={dismiss} copiedId={copiedId} />
+        <FloatingSignalsWidget signals={liveSignals} />
       </div>
     </div>
   );
