@@ -2121,6 +2121,26 @@ export default function DashboardPage() {
         setPortfolioStats(j.portfolioStats ?? null);
         setRenkoBricks(j.renkoBricks ?? []);
         setPaperEquity(j.paperEquity ?? []);
+        // Seed liveSignals from the initial fetch too — otherwise a symbol
+        // that qualified before this page load (and hasn't had a fresh
+        // Realtime broadcast since) never appears in FloatingSignalsWidget
+        // until either a broadcast arrives or the first 5-minute poll
+        // completes. Realtime broadcasts can also be missed outright during
+        // a reconnect (the channel does legitimately cycle
+        // SUBSCRIBED/CLOSED/SUBSCRIBED under normal operation), so the
+        // initial REST snapshot is the only guaranteed catch-up path.
+        if (j.sweeps) {
+          const fresh = j.sweeps.filter(
+            (s) => s && s.symbol && s.qualified !== false && s.signal
+          );
+          if (fresh.length) {
+            setLiveSignals((prev) => {
+              const seen = new Map(prev.map((s) => [s.symbol, s]));
+              fresh.forEach((s) => seen.set(s.symbol, s));
+              return Array.from(seen.values()).slice(0, 50);
+            });
+          }
+        }
       });
     return () => { cancelled = true };
   }, [statusChecked, planSlug]);
