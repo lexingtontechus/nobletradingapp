@@ -37,10 +37,15 @@ const INTERNAL_SECRET = Deno.env.get("INTERNAL_FUNCTION_SECRET") ?? "";
 
 const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY") ?? "";
 const NVIDIA_NIM_API_KEY = Deno.env.get("NVIDIA_NIM_API_KEY") ?? "";
-// Free-tier model IDs shift over time on both platforms — verified working
-// directly against both APIs on 2026-09-05 (several other candidates were
-// already retired/inaccessible by then). Re-verify if these start failing.
-const OPENROUTER_MODEL = Deno.env.get("OPENROUTER_MODEL") || "minimax/minimax-m3:free";
+// 2026-09-12: minimax/minimax-m3:free was retired — OpenRouter now 404s
+// with "This model is unavailable for free... use minimax/minimax-m3"
+// (the paid slug). Switched to "openrouter/auto", OpenRouter's own
+// meta-router — it picks a suitable underlying model per request and
+// respects the account-level default/fallback model configured in the
+// OpenRouter dashboard, so this default shouldn't go stale the same way
+// a specific free-tier model ID does. NVIDIA NIM's default is
+// unaffected — still verified working (2026-09-05).
+const OPENROUTER_MODEL = Deno.env.get("OPENROUTER_MODEL") || "openrouter/auto";
 const NVIDIA_NIM_MODEL = Deno.env.get("NVIDIA_NIM_MODEL") || "meta/llama-3.2-11b-vision-instruct";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
