@@ -1153,6 +1153,107 @@ function SignalHealthTable({ rows }) {
   );
 }
 
+function l1StatusBadge(status) {
+  const s = String(status || "").toUpperCase();
+  if (s === "OVERCONFIDENT") return "badge-warning";
+  if (s === "UNDERCONFIDENT") return "badge-info";
+  if (s === "CALIBRATED") return "badge-success";
+  return "badge-ghost"; // PROVISIONAL / INSUFFICIENT_DATA
+}
+
+// L1 calibration confidence board — per (symbol, side). Does not use research-stream
+// EOD win%/expiry as product quality (those are L3 geometry diagnostics).
+function CalibrationConfidenceBoard({ rows, outcomeBySide }) {
+  const sorted = [...(rows || [])].sort((a, b) => {
+    const biasA = Math.abs(Number(a.bias_raw || 0));
+    const biasB = Math.abs(Number(b.bias_raw || 0));
+    return biasB - biasA || (a.symbol || "").localeCompare(b.symbol || "");
+  });
+  const geomKey = (r) => `${r.symbol}|${r.signal}`;
+  const geomMap = {};
+  (outcomeBySide || []).forEach((g) => {
+    geomMap[geomKey(g)] = g;
+  });
+
+  return (
+    <div className="card bg-base-100 shadow border border-base-300 mb-6">
+      <div className="card-body">
+        <h3 className="card-title text-lg">L1 calibration confidence (28d)</h3>
+        <p className="text-xs opacity-60 mb-3">
+          Is <span className="font-mono">p_win</span> honest on the qualified book?
+          Raw (pre-enforcement) bias is the product claim. Side is buy vs sell.
+          Status is tightened: CALIBRATED needs ≥10 episodes, |bias| ≤ 0.05, and
+          expire ≤ 40%. Until <span className="font-mono">p_win_bracket</span> is
+          live, stated confidence is still <strong>direction confidence</strong>{" "}
+          (<span className="font-mono">p_dir</span>), not bracket-win probability.
+        </p>
+        <div className="overflow-x-auto">
+          <table className="table table-sm">
+            <thead>
+              <tr>
+                <th>Symbol</th>
+                <th>Side</th>
+                <th>Episodes</th>
+                <th>p_dir raw</th>
+                <th>Win closed</th>
+                <th>Bias raw</th>
+                <th>Brier</th>
+                <th>Expire</th>
+                <th>Status L1</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((r) => {
+                const g = geomMap[geomKey(r)] || r;
+                const expire = r.pct_expired ?? g.pct_expired;
+                return (
+                  <tr key={`${r.symbol}-${r.signal}`}>
+                    <td className="font-mono">{r.symbol}</td>
+                    <td className="uppercase text-xs">{r.signal}</td>
+                    <td className="font-mono">{r.n_episodes ?? 0}</td>
+                    <td>{r.avg_p_win_raw != null ? fmtKellyPct(r.avg_p_win_raw) : "—"}</td>
+                    <td>{r.win_rate_closed != null ? fmtKellyPct(r.win_rate_closed) : "—"}</td>
+                    <td
+                      className={
+                        Number(r.bias_raw) > 0.1
+                          ? "text-error"
+                          : Number(r.bias_raw) < -0.1
+                            ? "text-success"
+                            : ""
+                      }
+                    >
+                      {r.bias_raw != null ? Number(r.bias_raw).toFixed(3) : "—"}
+                    </td>
+                    <td>{r.brier_raw != null ? Number(r.brier_raw).toFixed(3) : "—"}</td>
+                    <td
+                      className={
+                        expire != null && Number(expire) > 0.4 ? "text-warning" : ""
+                      }
+                    >
+                      {expire != null ? fmtKellyPct(expire) : "—"}
+                      {r.high_expiry_geometry ? " ⚠" : ""}
+                    </td>
+                    <td>
+                      <span className={`badge badge-sm ${l1StatusBadge(r.status_l1)}`}>
+                        {r.status_l1 || "—"}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-xs opacity-50 mt-2">
+          Bias raw = avg p_dir raw − win_rate_closed on the same population (episode-counted).
+          High expire blocks a CALIBRATED claim (geometry must be in-model first). Pairs
+          matrix (Portfolio tab) shows buy/sell co-movement across commentary symbols.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function CalibrationTable({ rows }) {
   // Sort rows by symbol, latest day first within each symbol
   const sortedRows = [...(rows || [])].sort((a, b) => {
@@ -1166,9 +1267,11 @@ function CalibrationTable({ rows }) {
       <div className="card-body">
         <h3 className="card-title text-lg">Calibration bias (7d)</h3>
         <p className="text-xs opacity-60 mb-3">
-          Does predicted win rate match reality? OVERCONFIDENT = the model
-          predicted higher than it delivered (be cautious). UNDERCONFIDENT =
-          wins more than predicted. Near 0 = well calibrated.
+          Symbol-level bias over 7 days (episode-counted). OVERCONFIDENT = stated
+          confidence higher than delivered (be cautious). UNDERCONFIDENT = wins more
+          than predicted. Near 0 = honest. This is not the L1 product bar — see
+          “L1 calibration confidence” above for side-split, tightened status.
+          Stated confidence is still direction confidence until p_win_bracket is live.
         </p>
         <div className="overflow-x-auto">
           <table className="table table-sm">
@@ -1271,10 +1374,12 @@ function VsEqualWeightTable({ rows }) {
       <div className="card-body">
         <h3 className="card-title text-lg">Paper vs equal-weight (6 months)</h3>
         <p className="text-xs opacity-60 mb-3">
-          Is the strategy beating the benchmark? Paper PnL = the signal
-          engine's Kelly/regime-sized trades. Equal-wt PnL = same amount on
-          every symbol with no regime filter. Delta &gt; $0 (green) = engine
-          won for that month; Delta &lt; $0 (red) = benchmark won.
+          Paper PnL = Kelly/regime-sized paper book (~$200 notional). Equal-wt
+          PnL = naive sum over the research stream (1-unit price deltas —{" "}
+          <strong>different units</strong>). Treat Delta as directional context
+          only, not a product edge, until both sides share notional, cohort
+          (qualified book), and expired treatment. Prefer paper cumulative and
+          the L1 board for product quality.
         </p>
         <div className="overflow-x-auto">
           <table className="table table-sm">
@@ -2052,6 +2157,8 @@ export default function DashboardPage() {
   const [symbols, setSymbols] = useState([]);
   const [signalHealth, setSignalHealth] = useState([]);
   const [calibration, setCalibration] = useState([]);
+  const [calibrationBoard, setCalibrationBoard] = useState([]);
+  const [outcomeBySide, setOutcomeBySide] = useState([]);
   const [vsEqual, setVsEqual] = useState([]);
   const [portfolioStats, setPortfolioStats] = useState(null);
   const [renkoBricks, setRenkoBricks] = useState([]);
@@ -2117,6 +2224,8 @@ export default function DashboardPage() {
         setSymbols(j.symbols ?? []);
         setSignalHealth(j.signalHealth ?? []);
         setCalibration(j.calibration ?? []);
+        setCalibrationBoard(j.calibrationBoard ?? []);
+        setOutcomeBySide(j.outcomeBySide ?? []);
         setVsEqual(j.vsEqual ?? []);
         setPortfolioStats(j.portfolioStats ?? null);
         setRenkoBricks(j.renkoBricks ?? []);
@@ -2220,6 +2329,8 @@ export default function DashboardPage() {
               setRenkoBricks(j.renkoBricks ?? []);
               setSignalHealth(j.signalHealth ?? []);
               setCalibration(j.calibration ?? []);
+              setCalibrationBoard(j.calibrationBoard ?? []);
+              setOutcomeBySide(j.outcomeBySide ?? []);
               setVsEqual(j.vsEqual ?? []);
               setIsLoading(false);
               // Inject new qualified signals into live state so the
@@ -2450,6 +2561,7 @@ export default function DashboardPage() {
             <SignalHealthTable rows={signalHealth} />
 
             {/* Calibration bias (7d) */}
+            <CalibrationConfidenceBoard rows={calibrationBoard} outcomeBySide={outcomeBySide} />
             <CalibrationTable rows={calibration} />
 
             {/* Paper vs equal-weight (Precision Pro only) */}

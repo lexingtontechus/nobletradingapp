@@ -9,6 +9,8 @@
 //       sweeps: [...],              — v_talaria_latest_signals (latest sweep per symbol)
 //       signalHealth: [...],        — v_talaria_signal_health
 //       calibration: [...],         — v_eod_calibration_bias_latest
+//       calibrationBoard: [...],    — v_calibration_confidence_board (L1 honest status, 28d)
+//       outcomeBySide: [...],       — v_signal_outcome_by_side (L3 geometry, buy vs sell)
 //       vsEqual: [...],             — v_paper_vs_optimized_daily (Precision Pro only)
 //       portfolioStats: {...|null}, — v_talaria_portfolio_stats (Precision Pro only)
 //       renkoBricks: [...],         — v_talaria_renko (last 10 per symbol)
@@ -74,6 +76,8 @@ export async function GET() {
       sweeps: [],
       signalHealth: [],
       calibration: [],
+      calibrationBoard: [],
+      outcomeBySide: [],
       vsEqual: [],
       portfolioStats: null,
       renkoBricks: [],
@@ -104,6 +108,8 @@ export async function GET() {
       sweeps: [],
       signalHealth: [],
       calibration: [],
+      calibrationBoard: [],
+      outcomeBySide: [],
       vsEqual: [],
       vsEqualSymbol: [],
       portfolioStats: null,
@@ -128,6 +134,8 @@ export async function GET() {
     sweepsRes,
     healthRes,
     calibrationRes,
+    calibrationBoardRes,
+    outcomeBySideRes,
     renkoRes,
     vsEqualRes,
     portfolioRes,
@@ -139,6 +147,8 @@ export async function GET() {
     supabase.from("v_talaria_latest_signals").select("*"),
     supabase.from("v_talaria_signal_health").select("*"),
     supabase.from("v_eod_calibration_bias_latest").select("*"),
+    supabase.from("v_calibration_confidence_board").select("*"),
+    supabase.from("v_signal_outcome_by_side").select("*").eq("qualified", true),
     supabase.from("v_talaria_renko").select("*").order("session_date", { ascending: false }).order("brick_index", { ascending: false }),
     supabase.from("v_paper_vs_optimized_daily").select("*"),
     supabase.from("v_talaria_portfolio_stats").select("").maybeSingle(),
@@ -166,6 +176,8 @@ export async function GET() {
     sweeps: filteredSweeps,
     signalHealth: safeData(healthRes),
     calibration: safeData(calibrationRes),
+    calibrationBoard: safeData(calibrationBoardRes).filter((r) => planSymbolSet.has(r.symbol)),
+    outcomeBySide: safeData(outcomeBySideRes).filter((r) => planSymbolSet.has(r.symbol)),
     vsEqual: isPro ? safeData(vsEqualRes) : [],
     vsEqualSymbol: isPro ? safeData(vsEqualSymbolRes) : [],
     portfolioStats: isPro ? safeSingle(portfolioRes) : null,
