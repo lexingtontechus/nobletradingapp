@@ -1200,6 +1200,7 @@ function CalibrationConfidenceBoard({ rows, outcomeBySide }) {
                 <th>Brier</th>
                 <th>Expire</th>
                 <th>Status L1</th>
+                <th>Evidence</th>
               </tr>
             </thead>
             <tbody>
@@ -1238,6 +1239,15 @@ function CalibrationConfidenceBoard({ rows, outcomeBySide }) {
                         {r.status_l1 || "—"}
                       </span>
                     </td>
+                    <td>
+                      {r.thin_evidence ? (
+                        <span className="badge badge-sm badge-warning" title="n_episodes < 10 — do not claim CALIBRATED">
+                          thin
+                        </span>
+                      ) : (
+                        <span className="badge badge-sm badge-ghost">ok</span>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
@@ -1246,8 +1256,9 @@ function CalibrationConfidenceBoard({ rows, outcomeBySide }) {
         </div>
         <p className="text-xs opacity-50 mt-2">
           Bias raw = avg p_dir raw − win_rate_closed on the same population (episode-counted).
-          High expire blocks a CALIBRATED claim (geometry must be in-model first). Pairs
-          matrix (Portfolio tab) shows buy/sell co-movement across commentary symbols.
+          High expire blocks a CALIBRATED claim (geometry must be in-model first). Thin
+          evidence (n_episodes &lt; 10) cannot claim CALIBRATED. Pairs matrix (Portfolio tab)
+          shows buy/sell co-movement across commentary symbols.
         </p>
       </div>
     </div>
@@ -1351,7 +1362,7 @@ function CalibrationTable({ rows }) {
   );
 }
 
-function VsEqualWeightTable({ rows }) {
+function VsEqualWeightTable({ rows, alignedRows }) {
   // Aggregate daily rows into monthly totals (6-month rolling window).
   // The v_paper_vs_optimized_daily view returns daily rows with paper_pnl,
   // equal_wt_pnl, and paper_minus_equal_wt columns. We roll up by month.
@@ -1367,6 +1378,27 @@ function VsEqualWeightTable({ rows }) {
   });
   const monthlyRows = Object.values(monthlyMap)
     .map((m) => ({ ...m, delta: m.paper_pnl - m.equal_wt_pnl }))
+    .sort((a, b) => (a.month || "").localeCompare(b.month || ""));
+
+  // R5 unit-aligned baseline (v_paper_vs_equalwt_aligned) — same qualified cohort.
+  const alignedMap = {};
+  (alignedRows || []).forEach((r) => {
+    const day = r.day || "";
+    const monthKey = day.slice(0, 7);
+    if (!alignedMap[monthKey]) {
+      alignedMap[monthKey] = {
+        month: monthKey,
+        paper_pnl: 0,
+        equalwt_aligned_pnl: 0,
+        n_trades: 0,
+      };
+    }
+    alignedMap[monthKey].paper_pnl += Number(r.paper_pnl || 0);
+    alignedMap[monthKey].equalwt_aligned_pnl += Number(r.equalwt_aligned_pnl || 0);
+    alignedMap[monthKey].n_trades += Number(r.n_trades || 0);
+  });
+  const alignedMonthly = Object.values(alignedMap)
+    .map((m) => ({ ...m, delta: m.paper_pnl - m.equalwt_aligned_pnl }))
     .sort((a, b) => (a.month || "").localeCompare(b.month || ""));
 
   return (
@@ -1404,6 +1436,51 @@ function VsEqualWeightTable({ rows }) {
                   </td>
                 </tr>
               ))}
+            </tbody>
+          </table>
+        </div>
+
+        <h4 className="card-title text-base mt-4">Unit-aligned baseline (R5)</h4>
+        <p className="text-xs opacity-60 mb-3">
+          Same qualified cohort as paper (not the research stream). Equal-wt
+          here is the aligned baseline from{" "}
+          <span className="font-mono">v_paper_vs_equalwt_aligned</span> — still
+          approximate notional scaling, but removes the 1-unit blow-up above.
+          Prefer this Delta over the table above for L1 book context.
+        </p>
+        <div className="overflow-x-auto">
+          <table className="table table-sm">
+            <thead>
+              <tr>
+                <th>Month</th>
+                <th>Paper PnL</th>
+                <th>Equal-wt aligned</th>
+                <th>Delta</th>
+                <th>N</th>
+              </tr>
+            </thead>
+            <tbody>
+              {alignedMonthly.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="opacity-50">
+                    No aligned baseline rows yet (migration 161 / qualified book).
+                  </td>
+                </tr>
+              ) : (
+                alignedMonthly.map((r) => (
+                  <tr key={`al-${r.month}`}>
+                    <td>{r.month}</td>
+                    <td className={Number(r.paper_pnl) >= 0 ? "text-success" : "text-error"}>
+                      ${Number(r.paper_pnl).toFixed(2)}
+                    </td>
+                    <td>${Number(r.equalwt_aligned_pnl).toFixed(2)}</td>
+                    <td className={Number(r.delta) >= 0 ? "text-success" : "text-error"}>
+                      ${Number(r.delta).toFixed(2)}
+                    </td>
+                    <td className="font-mono">{r.n_trades}</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -2160,6 +2237,7 @@ export default function DashboardPage() {
   const [calibrationBoard, setCalibrationBoard] = useState([]);
   const [outcomeBySide, setOutcomeBySide] = useState([]);
   const [vsEqual, setVsEqual] = useState([]);
+  const [vsEqualAligned, setVsEqualAligned] = useState([]);
   const [portfolioStats, setPortfolioStats] = useState(null);
   const [renkoBricks, setRenkoBricks] = useState([]);
   const [paperEquity, setPaperEquity] = useState([]);
@@ -2227,6 +2305,7 @@ export default function DashboardPage() {
         setCalibrationBoard(j.calibrationBoard ?? []);
         setOutcomeBySide(j.outcomeBySide ?? []);
         setVsEqual(j.vsEqual ?? []);
+        setVsEqualAligned(j.vsEqualAligned ?? []);
         setPortfolioStats(j.portfolioStats ?? null);
         setRenkoBricks(j.renkoBricks ?? []);
         setPaperEquity(j.paperEquity ?? []);
@@ -2332,6 +2411,7 @@ export default function DashboardPage() {
               setCalibrationBoard(j.calibrationBoard ?? []);
               setOutcomeBySide(j.outcomeBySide ?? []);
               setVsEqual(j.vsEqual ?? []);
+              setVsEqualAligned(j.vsEqualAligned ?? []);
               setIsLoading(false);
               // Inject new qualified signals into live state so the
               // toast handler fires for any that arrived since the
@@ -2565,7 +2645,7 @@ export default function DashboardPage() {
             <CalibrationTable rows={calibration} />
 
             {/* Paper vs equal-weight (Precision Pro only) */}
-            {isPro && <VsEqualWeightTable rows={vsEqual} />}
+            {isPro && <VsEqualWeightTable rows={vsEqual} alignedRows={vsEqualAligned} />}
 
             {/* Portfolio stats (Precision Pro only) */}
             {isPro && portfolioStats && <PortfolioStatsCard stats={portfolioStats} />}

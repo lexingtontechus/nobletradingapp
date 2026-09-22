@@ -11,7 +11,9 @@
 //       calibration: [...],         — v_eod_calibration_bias_latest
 //       calibrationBoard: [...],    — v_calibration_confidence_board (L1 honest status, 28d)
 //       outcomeBySide: [...],       — v_signal_outcome_by_side (L3 geometry, buy vs sell)
-//       vsEqual: [...],             — v_paper_vs_optimized_daily (Precision Pro only)
+//       vsEqual: [...],             — v_paper_vs_optimized_daily (incommensurate units — context only)
+//       vsEqualAligned: [...],      — v_paper_vs_equalwt_aligned (R5 unit-aligned L1 benchmark)
+//       vsEqualSymbol: [...],       — v_paper_vs_optimized_symbol (Precision Pro only)
 //       portfolioStats: {...|null}, — v_talaria_portfolio_stats (Precision Pro only)
 //       renkoBricks: [...],         — v_talaria_renko (last 10 per symbol)
 //       symbols: [...],             — v_talaria_symbols (plan-gated)
@@ -79,6 +81,7 @@ export async function GET() {
       calibrationBoard: [],
       outcomeBySide: [],
       vsEqual: [],
+      vsEqualAligned: [],
       portfolioStats: null,
       renkoBricks: [],
       symbols: [],
@@ -111,6 +114,7 @@ export async function GET() {
       calibrationBoard: [],
       outcomeBySide: [],
       vsEqual: [],
+      vsEqualAligned: [],
       vsEqualSymbol: [],
       portfolioStats: null,
       renkoBricks: [],
@@ -138,6 +142,7 @@ export async function GET() {
     outcomeBySideRes,
     renkoRes,
     vsEqualRes,
+    vsEqualAlignedRes,
     portfolioRes,
     symbolsRes,
     paperPositionsRes,
@@ -151,6 +156,7 @@ export async function GET() {
     supabase.from("v_signal_outcome_by_side").select("*").eq("qualified", true),
     supabase.from("v_talaria_renko").select("*").order("session_date", { ascending: false }).order("brick_index", { ascending: false }),
     supabase.from("v_paper_vs_optimized_daily").select("*"),
+    supabase.from("v_paper_vs_equalwt_aligned").select("*"),
     supabase.from("v_talaria_portfolio_stats").select("").maybeSingle(),
     // v_talaria_symbols is filtered by plan_ids containment — this is the
     // canonical plan-gated roster (10 symbols for Signal Scout, 20 for Pro).
@@ -179,6 +185,7 @@ export async function GET() {
     calibrationBoard: safeData(calibrationBoardRes).filter((r) => planSymbolSet.has(r.symbol)),
     outcomeBySide: safeData(outcomeBySideRes).filter((r) => planSymbolSet.has(r.symbol)),
     vsEqual: isPro ? safeData(vsEqualRes) : [],
+    vsEqualAligned: safeData(vsEqualAlignedRes),
     vsEqualSymbol: isPro ? safeData(vsEqualSymbolRes) : [],
     portfolioStats: isPro ? safeSingle(portfolioRes) : null,
     renkoBricks: filteredRenko,

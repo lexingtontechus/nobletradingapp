@@ -45,8 +45,8 @@ Graceful empty arrays if views are not deployed yet.
 
 | Path | Change |
 |---|---|
-| `app/api/dashboard-data/route.js` | + calibrationBoard, outcomeBySide |
-| `app/dashboard/page.jsx` | + CalibrationConfidenceBoard; copy updates |
+| `app/api/dashboard-data/route.js` | + calibrationBoard, outcomeBySide, vsEqualAligned (`v_paper_vs_equalwt_aligned`) |
+| `app/dashboard/page.jsx` | + CalibrationConfidenceBoard (thin_evidence badge); unit-aligned baseline table |
 
 ## Verify
 
