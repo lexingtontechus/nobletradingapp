@@ -15,28 +15,23 @@
 //       vsEqualAligned: [...],      — v_paper_vs_equalwt_aligned (R5 unit-aligned L1 benchmark)
 //       vsEqualSymbol: [...],       — v_paper_vs_optimized_symbol (Precision Pro only)
 //       portfolioStats: {...|null}, — v_talaria_portfolio_stats (Precision Pro only)
-//       renkoBricks: [...],         — webapp /webapp/renko (fallback v_talaria_renko)
+//       renkoBricks: [...],         — v_talaria_renko (last 10 per symbol)
 //       kelly: [...],               — v_talaria_kelly_by_symbol (Analysis Kelly table)
-//       symbols: [...],             — v_talaria_symbols (plan-gated)
+//       symbols: [...],             — v_talaria_symbols (plan-gated; admin = all active)
 //       paperPositions: [...],      — v_paper_positions (Precision Pro only)
-//       paperEquity: [...],          — v_paper_equity (Precision Pro only)
-//       planSlug, isPro
+//       paperEquity: [...],         — v_paper_equity (Precision Pro only)
+//       planSlug, isPro, isAdmin
 //     }
 //
-// Uses the service role key (server-only) so it can read views for ALL
-// symbols. Plan-scoping is handled via the claim-token RLS on Pro-only views,
-// the Realtime broadcast channel realtime:signals.<plan_slug>, and the
-// v_talaria_symbols.plan_ids containment filter.
-//
-// Views are created by migration 0009_talaria_dashboard_views.sql (views only,
-// no new tables). If a view hasn't been deployed yet, the query returns an
-// error (PGRST205) — we degrade gracefully to empty arrays so the dashboard
-// renders with its fallback UI instead of crashing.
+// Admin: full roster + Pro analytics regardless of subscription/plan.
+// Members: plan_ids containment on v_talaria_symbols (uuid[] → cs.{uuid}).
+// Uses the service role key (server-only). Missing views degrade to [].
 // =============================================================================
 
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
+import { checkRole } from "@/utils/roles";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -44,18 +39,8 @@ const supabase = createClient(
   { auth: { persistSession: false } }
 );
 
-const WEBAPP_BACKEND_URL =
-  process.env.WEBAPP_BACKEND_URL || "https://nobletradingapp-backend.onrender.com";
-const WEBAPP_BACKEND_API_KEY = process.env.WEBAPP_BACKEND_API_KEY;
-
-// Helper: safely extract data from a Supabase query result, degrading to []
-// when the view doesn't exist (PGRST205) or returns an error.
 function safeData(res) {
   if (res?.data) return res.data;
-  // PGRST205 = "Could not find the entity relationship..." (view/table doesn't exist)
-  // PGRST116 = "The response should be a single object..." (maybeSingle mismatch)
-  // Both are expected during gradual rollouts where views are deployed
-  // independently of the app code.
   return [];
 }
 
@@ -70,49 +55,42 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Resolve the user's local ID + active plan
   const { data: localUser } = await supabase
     .from("users")
-    .select("id")
+    .select("id, role")
     .eq("clerk_user_id", userId)
     .maybeSingle();
 
-  if (!localUser) {
-    // First-visit — upsert happens in /api/subscription-status. Return empty.
-    return NextResponse.json({
-      sweeps: [],
-      signalHealth: [],
-      calibration: [],
-      calibrationBoard: [],
-      outcomeBySide: [],
-      vsEqual: [],
-      vsEqualAligned: [],
-      portfolioStats: null,
-      renkoBricks: [],
-      kelly: [],
-      symbols: [],
-      paperPositions: [],
-      paperEquity: [],
-      planSlug: null,
-      isPro: false,
-    });
+  // users.role is a lazy mirror; fall back to Clerk metadata (public|private).
+  let isAdmin = localUser?.role === "admin";
+  if (!isAdmin) {
+    try {
+      isAdmin = await checkRole("admin");
+    } catch {
+      isAdmin = false;
+    }
   }
 
-  // Most recent active/grace/pending subscription
-  const { data: subscription } = await supabase
-    .from("subscriptions")
-    .select(`
-      plan_id,
-      plans(id, title, description, price_cents, currency, interval,
-            helio_paylink_id, slug)
-    `)
-    .eq("user_id", localUser.id)
-    .in("status", ["pending", "active", "grace"])
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  let planSlug = null;
+  let planUuid = null;
+  if (localUser?.id) {
+    const { data: subscription } = await supabase
+      .from("subscriptions")
+      .select(
+        `plan_id,
+         plans(id, title, description, price_cents, currency, interval,
+               helio_paylink_id, slug)`
+      )
+      .eq("user_id", localUser.id)
+      .in("status", ["pending", "active", "grace"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    planSlug = subscription?.plans?.slug ?? null;
+    planUuid = subscription?.plans?.id ?? subscription?.plan_id ?? null;
+  }
 
-  if (!subscription?.plans?.slug) {
+  if (!isAdmin && !planSlug) {
     return NextResponse.json({
       sweeps: [],
       signalHealth: [],
@@ -130,17 +108,22 @@ export async function GET() {
       paperEquity: [],
       planSlug: null,
       isPro: false,
+      isAdmin: false,
     });
   }
 
-  const planSlug = subscription.plans.slug;
-  const planUuid = subscription.plans.id;
-  const isPro = planSlug === "precision_pro";
+  const isPro = isAdmin || planSlug === "precision_pro";
 
-  // Fetch all dashboard data in parallel.
-  // Views are plan-agnostic (anon-readable); plan scoping:
-  //   - v_talaria_symbols: filtered by plan_ids contains [planUuid]
-  //   - Pro-only views: gated client-side via isPro flag
+  // Admins: all active symbols. Members: plan_ids @> {uuid} on uuid[].
+  // A failed filter must not wipe the dashboard.
+  let symbolsQuery = supabase
+    .from("v_talaria_symbols")
+    .select("*")
+    .eq("active", true);
+  if (!isAdmin && planUuid) {
+    symbolsQuery = symbolsQuery.filter("plan_ids", "cs", `{${planUuid}}`);
+  }
+
   const [
     sweepsRes,
     healthRes,
@@ -152,6 +135,7 @@ export async function GET() {
     vsEqualAlignedRes,
     portfolioRes,
     symbolsRes,
+    kellyRes,
     paperPositionsRes,
     paperEquityRes,
     vsEqualSymbolRes,
@@ -161,71 +145,34 @@ export async function GET() {
     supabase.from("v_eod_calibration_bias_latest").select("*"),
     supabase.from("v_calibration_confidence_board").select("*"),
     supabase.from("v_signal_outcome_by_side").select("*").eq("qualified", true),
-    supabase.from("v_talaria_renko").select("*").order("session_date", { ascending: false }).order("brick_index", { ascending: false }),
+    supabase
+      .from("v_talaria_renko")
+      .select("*")
+      .order("session_date", { ascending: false })
+      .order("brick_index", { ascending: false }),
     supabase.from("v_paper_vs_optimized_daily").select("*"),
     supabase.from("v_paper_vs_equalwt_aligned").select("*"),
     supabase.from("v_talaria_portfolio_stats").select("").maybeSingle(),
-    // v_talaria_symbols is filtered by plan_ids containment — this is the
-    // canonical plan-gated roster (10 symbols for Signal Scout, 20 for Pro).
-    // All other views are plan-agnostic, so we filter them client-side here
-    // by intersecting against the symbol list from v_talaria_symbols.
-    supabase.from("v_talaria_symbols").select("*").contains("plan_ids", [planUuid]),
+    symbolsQuery,
+    supabase.from("v_talaria_kelly_by_symbol").select("*"),
     isPro ? supabase.from("v_paper_positions").select("*") : { data: [] },
- isPro ? supabase.from("v_paper_equity").select("*") : { data: [] },
- isPro ? supabase.from("v_paper_vs_optimized_symbol").select("*") : { data: [] },
- ]);
+    isPro ? supabase.from("v_paper_equity").select("*") : { data: [] },
+    isPro ? supabase.from("v_paper_vs_optimized_symbol").select("*") : { data: [] },
+  ]);
 
-  // Plan-gating: v_talaria_symbols returns the plan-scoped roster (10 for
-  // Signal Scout, 20 for Precision Pro). Filter sweeps + renko to only include
-  // symbols in that roster — otherwise a Signal Scout user would see sweeps for
-  // all 39 symbols (including Pro-only symbols).
-  // Fallback: if the plan UUID no longer matches plan_ids (view/plan drift),
-  // do not wipe the dashboard — use all active symbols from the view.
   let symbolsData = safeData(symbolsRes);
   if (symbolsData.length === 0) {
-    const { data: allSyms } = await supabase
+    const { data: allActive } = await supabase
       .from("v_talaria_symbols")
       .select("*")
       .eq("active", true);
-    symbolsData = allSyms || [];
+    symbolsData = allActive || [];
   }
   const planSymbolSet = new Set(symbolsData.map((s) => s.symbol));
 
-  // Kelly table (Analysis) — dedicated view, not merged sweeps.
-  const kellyRes = await supabase.from("v_talaria_kelly_by_symbol").select("*");
-  let kellyRows = safeData(kellyRes).filter((r) => planSymbolSet.has(r.symbol));
-  if (kellyRows.length === 0) {
-    kellyRows = safeData(sweepsRes).filter((s) => planSymbolSet.has(s.symbol));
-  }
-
-  // Market renko — prefer webapp backend construction; fall back to the view.
-  let renkoRows = safeData(renkoRes).filter((b) => planSymbolSet.has(b.symbol));
-  if (planSymbolSet.size > 0 && WEBAPP_BACKEND_API_KEY) {
-    try {
-      const symList = [...planSymbolSet].slice(0, 30).join(",");
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 20_000);
-      const rr = await fetch(
-        `${WEBAPP_BACKEND_URL}/webapp/renko?symbols=${encodeURIComponent(symList)}&limit=10`,
-        {
-          headers: { "X-API-Key": WEBAPP_BACKEND_API_KEY },
-          signal: ctrl.signal,
-        }
-      );
-      clearTimeout(t);
-      if (rr.ok) {
-        const j = await rr.json();
-        if (Array.isArray(j?.bricks) && j.bricks.length) {
-          renkoRows = j.bricks.filter((b) => planSymbolSet.has(b.symbol));
-        }
-      }
-    } catch {
-      // keep Supabase view fallback
-    }
-  }
-
   const filteredSweeps = safeData(sweepsRes).filter((s) => planSymbolSet.has(s.symbol));
-  const filteredRenko = renkoRows;
+  const filteredRenko = safeData(renkoRes).filter((b) => planSymbolSet.has(b.symbol));
+  const kellyRows = safeData(kellyRes).filter((r) => planSymbolSet.has(r.symbol));
 
   return NextResponse.json({
     sweeps: filteredSweeps,
@@ -244,5 +191,6 @@ export async function GET() {
     paperEquity: isPro ? safeData(paperEquityRes) : [],
     planSlug,
     isPro,
+    isAdmin,
   });
 }
