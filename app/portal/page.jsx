@@ -31,7 +31,6 @@ import { SubscriptionStatusBadge } from "../components/subscription-status-badge
 import { TalariaCredentialsPanel } from "../components/talaria-credentials-panel"
 import { TalariaPluginDownloadPanel } from "../components/talaria-plugin-download-panel"
 import PlanSelector from "../components/plan-selector"
-import PlatformHealthCard from "../components/platform-health-card"
 
 // -----------------------------------------------------------------------------
 // HYBRID AUTH PATTERN (see supabase/functions/helio-webhook/index.ts):
@@ -319,9 +318,6 @@ export default function Portal() {
         ) : (
           <NoSubscriptionCard onChosePlan={refresh} />
         )}
-
-        {/* Platform health — quality vs odds, coverage, settlement (no win-rate claims) */}
-        <PlatformHealthCard />}
 
         {/* Talaria credentials panel — shown only for active/grace subs.
             Hidden behind a "Reveal" button so creds aren't visible on screen-share. */}

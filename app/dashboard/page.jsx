@@ -31,6 +31,7 @@ import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import { TalariaMark } from "../components/talaria-mark";
 import { createClient } from "@/utils/supabase/client";
+import PlatformHealthCard from "../components/platform-health-card";
 
 // -- Floating live-signals widget --
 // Replaces the old toast-per-signal + HotSignalsBanner pair (2026-09-06):
@@ -371,7 +372,7 @@ function StatCard({ title, value, sub, tone, valueClassName }) {
 function TabBar({ active, onChange }) {
   return (
     <div className="tabs tabs-border mb-4">
-      {["market", "analysis", "portfolio", "eod"].map((tab) => (
+      {["market", "analysis", "portfolio", "health", "eod"].map((tab) => (
         <button
           key={tab}
           className={
@@ -388,7 +389,9 @@ function TabBar({ active, onChange }) {
               ? "Analysis"
               : tab === "portfolio"
                 ? "Portfolio"
-                : "EOD Report"}
+                : tab === "health"
+                  ? "Platform Health"
+                  : "EOD Report"}
         </button>
       ))}
     </div>
@@ -2652,6 +2655,15 @@ export default function DashboardPage() {
           </Fragment>
         )}
         {activeTab === "portfolio" && <SignalRiskCard isPro={isPro} />}
+        {activeTab === "health" && (
+          <Fragment>
+            <p className="text-sm opacity-70 mb-4">
+              Ops quality for the live signal platform — coverage, expiry, and
+              edge against each trade&apos;s own odds. Not a marketing win rate.
+            </p>
+            <PlatformHealthCard />
+          </Fragment>
+        )}
         {activeTab === "eod" && <EodReportView />}
 
         <FloatingSignalsWidget signals={liveSignals} />

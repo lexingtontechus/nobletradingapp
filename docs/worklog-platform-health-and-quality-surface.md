@@ -68,11 +68,13 @@ Auth: Clerk signed-in (same as other portal APIs). Service-role reads only.
 
 ## UI
 
-### Portal — `PlatformHealthCard` (`app/components/platform-health-card.jsx`)
+### Dashboard — `PlatformHealthCard` tab (`app/dashboard/page.jsx` + `app/components/platform-health-card.jsx`)
 
+- New **Platform Health** tab (between Portfolio and EOD Report).
 - Compact status tiles: **Coverage**, **Expiry**, **Edge vs odds**, **Settlement**.
 - “What’s improving” list (static-safe copy tied to roadmap themes): geometry / fewer expiries, loss completeness, faster feedback.
 - Plain language footer: quality is measured **against the bracket’s own odds**, not a marketing win rate.
+- **Not on portal** (2026-09-26 correction): portal stays subscription/onboarding; quality lives with the signal dashboard.
 
 ### Admin — `widget_platform_quality.jsx`
 
@@ -88,7 +90,7 @@ Auth: Clerk signed-in (same as other portal APIs). Service-role reads only.
 | `app/components/platform-health-card.jsx` | User-facing card |
 | `app/admin/widget_platform_quality.jsx` | Admin quality strip |
 | `app/admin/page.jsx` | Mount admin widget |
-| `app/portal/page.jsx` | Mount user card (active sub) |
+| `app/portal/page.jsx` | **No mount** — health card is dashboard-only |
 
 ## Verify
 
