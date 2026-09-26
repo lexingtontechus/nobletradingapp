@@ -15,7 +15,8 @@
 //       vsEqualAligned: [...],      — v_paper_vs_equalwt_aligned (R5 unit-aligned L1 benchmark)
 //       vsEqualSymbol: [...],       — v_paper_vs_optimized_symbol (Precision Pro only)
 //       portfolioStats: {...|null}, — v_talaria_portfolio_stats (Precision Pro only)
-//       renkoBricks: [...],         — v_talaria_renko (last 10 per symbol)
+//       renkoBricks: [...],         — webapp /webapp/renko (fallback v_talaria_renko)
+//       kelly: [...],               — v_talaria_kelly_by_symbol (Analysis Kelly table)
 //       symbols: [...],             — v_talaria_symbols (plan-gated)
 //       paperPositions: [...],      — v_paper_positions (Precision Pro only)
 //       paperEquity: [...],          — v_paper_equity (Precision Pro only)
@@ -42,6 +43,10 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY,
   { auth: { persistSession: false } }
 );
+
+const WEBAPP_BACKEND_URL =
+  process.env.WEBAPP_BACKEND_URL || "https://nobletradingapp-backend.onrender.com";
+const WEBAPP_BACKEND_API_KEY = process.env.WEBAPP_BACKEND_API_KEY;
 
 // Helper: safely extract data from a Supabase query result, degrading to []
 // when the view doesn't exist (PGRST205) or returns an error.
@@ -84,6 +89,7 @@ export async function GET() {
       vsEqualAligned: [],
       portfolioStats: null,
       renkoBricks: [],
+      kelly: [],
       symbols: [],
       paperPositions: [],
       paperEquity: [],
@@ -118,6 +124,7 @@ export async function GET() {
       vsEqualSymbol: [],
       portfolioStats: null,
       renkoBricks: [],
+      kelly: [],
       symbols: [],
       paperPositions: [],
       paperEquity: [],
@@ -172,11 +179,53 @@ export async function GET() {
   // Signal Scout, 20 for Precision Pro). Filter sweeps + renko to only include
   // symbols in that roster — otherwise a Signal Scout user would see sweeps for
   // all 39 symbols (including Pro-only symbols).
-  const symbolsData = safeData(symbolsRes);
+  // Fallback: if the plan UUID no longer matches plan_ids (view/plan drift),
+  // do not wipe the dashboard — use all active symbols from the view.
+  let symbolsData = safeData(symbolsRes);
+  if (symbolsData.length === 0) {
+    const { data: allSyms } = await supabase
+      .from("v_talaria_symbols")
+      .select("*")
+      .eq("active", true);
+    symbolsData = allSyms || [];
+  }
   const planSymbolSet = new Set(symbolsData.map((s) => s.symbol));
 
+  // Kelly table (Analysis) — dedicated view, not merged sweeps.
+  const kellyRes = await supabase.from("v_talaria_kelly_by_symbol").select("*");
+  let kellyRows = safeData(kellyRes).filter((r) => planSymbolSet.has(r.symbol));
+  if (kellyRows.length === 0) {
+    kellyRows = safeData(sweepsRes).filter((s) => planSymbolSet.has(s.symbol));
+  }
+
+  // Market renko — prefer webapp backend construction; fall back to the view.
+  let renkoRows = safeData(renkoRes).filter((b) => planSymbolSet.has(b.symbol));
+  if (planSymbolSet.size > 0 && WEBAPP_BACKEND_API_KEY) {
+    try {
+      const symList = [...planSymbolSet].slice(0, 30).join(",");
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 20_000);
+      const rr = await fetch(
+        `${WEBAPP_BACKEND_URL}/webapp/renko?symbols=${encodeURIComponent(symList)}&limit=10`,
+        {
+          headers: { "X-API-Key": WEBAPP_BACKEND_API_KEY },
+          signal: ctrl.signal,
+        }
+      );
+      clearTimeout(t);
+      if (rr.ok) {
+        const j = await rr.json();
+        if (Array.isArray(j?.bricks) && j.bricks.length) {
+          renkoRows = j.bricks.filter((b) => planSymbolSet.has(b.symbol));
+        }
+      }
+    } catch {
+      // keep Supabase view fallback
+    }
+  }
+
   const filteredSweeps = safeData(sweepsRes).filter((s) => planSymbolSet.has(s.symbol));
-  const filteredRenko = safeData(renkoRes).filter((b) => planSymbolSet.has(b.symbol));
+  const filteredRenko = renkoRows;
 
   return NextResponse.json({
     sweeps: filteredSweeps,
@@ -189,6 +238,7 @@ export async function GET() {
     vsEqualSymbol: isPro ? safeData(vsEqualSymbolRes) : [],
     portfolioStats: isPro ? safeSingle(portfolioRes) : null,
     renkoBricks: filteredRenko,
+    kelly: kellyRows,
     symbols: symbolsData,
     paperPositions: isPro ? safeData(paperPositionsRes) : [],
     paperEquity: isPro ? safeData(paperEquityRes) : [],

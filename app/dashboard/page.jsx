@@ -972,13 +972,12 @@ function signalCall(r) {
   return { label: `CAUTION (${isSell ? "sell" : "buy"} lean)`, toneClass: "text-warning" };
 }
 
-function KellyTable({ sweeps, symbolList }) {
-  // Iterate over the active symbol list (from v_talaria_symbols — 14 symbols),
-  // looking up each symbol's latest sweep row from the merged sweeps data.
-  // This avoids duplicate rows from nt_sweep_result (which has multiple sweep
-  // runs per symbol).
+function KellyTable({ sweeps, kelly, symbolList }) {
+  // Prefer dedicated v_talaria_kelly_by_symbol rows (stable contract);
+  // fall back to merged sweeps if the view is empty/missing.
+  const source = (kelly && kelly.length ? kelly : sweeps) || [];
   const rows = (symbolList || []).map((sym) => {
-    const row = sweeps.find((s) => s.symbol === sym);
+    const row = source.find((s) => s.symbol === sym);
     return row ? { symbol: sym, ...row } : { symbol: sym, _missing: true };
   });
 
@@ -2243,6 +2242,7 @@ export default function DashboardPage() {
   const [vsEqualAligned, setVsEqualAligned] = useState([]);
   const [portfolioStats, setPortfolioStats] = useState(null);
   const [renkoBricks, setRenkoBricks] = useState([]);
+  const [kellyRows, setKellyRows] = useState([]);
   const [paperEquity, setPaperEquity] = useState([]);
 
   useEffect(() => {
@@ -2311,6 +2311,7 @@ export default function DashboardPage() {
         setVsEqualAligned(j.vsEqualAligned ?? []);
         setPortfolioStats(j.portfolioStats ?? null);
         setRenkoBricks(j.renkoBricks ?? []);
+        setKellyRows(j.kelly ?? []);
         setPaperEquity(j.paperEquity ?? []);
         // Seed liveSignals from the initial fetch too — otherwise a symbol
         // that qualified before this page load (and hasn't had a fresh
@@ -2409,6 +2410,7 @@ export default function DashboardPage() {
               setSweeps(j.sweeps ?? []);
               setSymbols(j.symbols ?? []);
               setRenkoBricks(j.renkoBricks ?? []);
+        setKellyRows(j.kelly ?? []);
               setSignalHealth(j.signalHealth ?? []);
               setCalibration(j.calibration ?? []);
               setCalibrationBoard(j.calibrationBoard ?? []);
@@ -2620,7 +2622,7 @@ export default function DashboardPage() {
         {activeTab === "analysis" && (
           <Fragment>
             {/* Kelly by symbol (grouped by asset class, sorted) */}
-            <KellyTable sweeps={mergedSweeps} symbolList={resolvedSymbolList} />
+            <KellyTable sweeps={mergedSweeps} kelly={kellyRows} symbolList={resolvedSymbolList} />
 
             {/* Paper portfolio (Precision Pro only) */}
             {isPro && (
