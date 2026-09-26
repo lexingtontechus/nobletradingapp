@@ -54,8 +54,8 @@ Auth: Clerk signed-in (same as other portal APIs). Service-role reads only.
 - `admin` block present only when `users.role === 'admin'`.
 - **Source: `v_platform_health_summary` (migration 0018)** — one pre-aggregated row. The app never pages `nt_signal_sim` (slow, load-heavy on the trading DB).
 - Missing view degrades to `null` metrics (never 500).
-- Kelly Analysis table: `v_talaria_kelly_by_symbol`.
-- Market renko: proxied from `nobletradingapp-backend` `GET /webapp/renko` (fallback `v_talaria_renko`).
+- Kelly Analysis table: `v_talaria_kelly_by_symbol` (view over `v_talaria_latest_signals`).
+- Market renko: **unchanged** — `v_talaria_renko` via `dashboard-data` (no new backend route).
 
 ### Definitions (mirror backend scorecard)
 
