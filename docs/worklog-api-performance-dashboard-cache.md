@@ -24,11 +24,24 @@
 
 ## Fix
 
-### DB (migrations 0023–0025, applied live)
+### DB (migrations 0021–0023, 0025 — REMOVED 2026-09-27, see note below)
+
+> **2026-09-27 ownership change:** `talaria_dashboard_cache`,
+> `refresh_talaria_dashboard_cache()`, and `v_talaria_latest_signals` are now
+> owned exclusively by `noble-trader-fastapi-backend` (migrations
+> 175/178/179/180). Both repos independently redeploying these same live
+> objects was the root cause of a Supabase incident (write errors + IO
+> pressure from cron collisions + a `DISTINCT ON` full-table-scan matview
+> refresh) — see `noble-trader-fastapi-backend/worklog/` for the incident
+> writeup. `0021_optimize_talaria_views.sql`, `0022_materialize_latest_signals.sql`,
+> `0023_dashboard_bundle_cache.sql`, and `0025_slim_dashboard_cache_payload.sql`
+> were deleted from this repo's `supabase/migrations/` — do not recreate them
+> here. `0024_mint_talaria_claim.sql` (talaria-claim atomicity, no shared
+> objects) is unaffected and stays.
 
 - **`talaria_dashboard_cache`** — single-row JSONB snapshot of the entire dashboard bundle + `health` block.
 - **`refresh_talaria_dashboard_cache()`** — rebuilds the snapshot; refreshes `v_talaria_latest_signals` matview `CONCURRENTLY` first.
-- **pg_cron** `*/2 * * * *` → refresh cache (duplicate latest_signals-only job removed).
+- **pg_cron** `*/2 * * * *` → refresh cache (duplicate latest_signals-only job removed). *(Superseded: fastapi-backend migration 178 restaggered this to a collision-free offset schedule.)*
 - **`mint_talaria_claim()`** — advisory-locked revoke-then-insert in one transaction.
 - Slimmed payload: renko 8/symbol, paperPositions 80 (open first), `vsEqualSymbol` DISTINCT ON symbol (14 rows).
 
