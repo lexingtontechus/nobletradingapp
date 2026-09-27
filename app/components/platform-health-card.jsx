@@ -126,7 +126,9 @@ export default function PlatformHealthCard() {
               <div className="stat py-2">
                 <div className="stat-title text-xs">Last alert</div>
                 <div className="stat-value text-xl">{ago(u?.last_signal_at)}</div>
-                <div className="stat-desc">most recent setup</div>
+                <div className="stat-desc">
+                  last qualified · scan {ago(u?.last_scan_at)}
+                </div>
               </div>
               <div className="stat py-2">
                 <div className="stat-title text-xs">Settled (7d)</div>

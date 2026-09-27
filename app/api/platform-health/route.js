@@ -129,6 +129,7 @@ export async function GET() {
     signals_24h: health?.qualified_24h ?? null,
     signals_7d: delta(health?.qualified_7d, health?.qualified_7d_prev),
     last_signal_at: health?.last_signal_at ?? null,
+    last_scan_at: health?.last_scan_at ?? null,
     symbols_watched: health?.symbols_active ?? null,
     settled_7d: health?.decided_7d ?? null,
     win_rate_7d: delta(health?.tp_rate_7d, health?.tp_rate_7d_prev),

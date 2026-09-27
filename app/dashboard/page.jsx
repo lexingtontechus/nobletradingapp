@@ -2356,7 +2356,7 @@ export default function DashboardPage() {
         // initial REST snapshot is the only guaranteed catch-up path.
         if (j.sweeps) {
           const fresh = j.sweeps.filter(
-            (s) => s && s.symbol && s.qualified !== false && s.signal
+            (s) => s && s.symbol && s.qualified === true && s.signal
           );
           if (fresh.length) {
             setLiveSignals((prev) => {
@@ -2456,7 +2456,7 @@ export default function DashboardPage() {
               // last Realtime event. Dedup by symbol (newest wins).
               if (j.sweeps) {
                 const fresh = j.sweeps.filter(
-                  (s) => s && s.symbol && s.qualified !== false && s.signal
+                  (s) => s && s.symbol && s.qualified === true && s.signal
                 );
                 if (fresh.length) {
                   setLiveSignals((prev) => {
@@ -2586,11 +2586,13 @@ export default function DashboardPage() {
             title="Realtime"
             value={formatLastAlert(health?.user?.last_signal_at)}
             sub={
-              wsStatus === "connected"
-                ? "Live feed"
+              (wsStatus === "connected"
+                ? "Live"
                 : wsStatus === "error"
                   ? "Feed error"
-                  : "Connecting"
+                  : "Connecting") +
+              " · last qualified · scan " +
+              formatLastAlert(health?.user?.last_scan_at)
             }
             tone={wsStatus === "connected" ? "pos" : wsStatus === "error" ? "neg" : "warn"}
           />

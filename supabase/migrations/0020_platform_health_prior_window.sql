@@ -59,7 +59,10 @@ agg AS (
     count(*) FILTER (WHERE qualified)::numeric AS qualified,
     avg(hit - no_skill) FILTER (WHERE hit IS NOT NULL AND no_skill IS NOT NULL) AS edge_vs_no_skill,
     avg(hit) FILTER (WHERE hit IS NOT NULL) AS tp_rate,
-    max(ts) FILTER (WHERE win = 'cur') AS last_signal_at
+    -- QUALIFIED only — same population as broadcast + FloatingSignalsWidget.
+    -- max(ts) over all rows made Realtime look "live" while the widget was empty.
+    max(ts) FILTER (WHERE qualified) AS last_signal_at,
+    max(ts) FILTER (WHERE win = 'cur') AS last_scan_at
   FROM decided_window
   WHERE win IS NOT NULL
   GROUP BY win
@@ -92,6 +95,7 @@ SELECT
   CASE WHEN cur.closed > 0 THEN cur.expired / cur.closed ELSE NULL END AS expiry_share_7d,
   cur.edge_vs_no_skill AS edge_vs_no_skill_7d,
   cur.last_signal_at AS last_signal_at,
+  cur.last_scan_at AS last_scan_at,
   prev.qualified AS qualified_7d_prev,
   prev.tp_rate AS tp_rate_7d_prev,
   CASE WHEN prev.closed > 0 THEN prev.expired / prev.closed ELSE NULL END AS expiry_share_7d_prev,
