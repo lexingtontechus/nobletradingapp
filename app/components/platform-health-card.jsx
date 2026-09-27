@@ -1,5 +1,9 @@
-// PlatformHealthCard — user-facing platform quality strip (portal).
-// Quality language: coverage, expiry, edge vs no-skill. Never a raw win rate.
+// PlatformHealthCard — dashboard "Platform Health" tab.
+//
+// Members see product metrics (signals, settled outcomes, vs odds).
+// Admins also get ops tiles (sweep coverage, settlement, rank stamps).
+// Never a raw "win rate" claim — quality is vs each trade's own odds.
+//
 // API: GET /api/platform-health
 
 "use client";
@@ -17,6 +21,17 @@ function signed(n) {
   return `${v > 0 ? "+" : ""}${v.toFixed(2)}`;
 }
 
+function ago(iso) {
+  if (!iso) return "—";
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return "—";
+  const m = Math.max(0, Math.round((Date.now() - t) / 60000));
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  if (h < 48) return `${h}h ago`;
+  return `${Math.round(h / 24)}d ago`;
+}
+
 export default function PlatformHealthCard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -24,10 +39,10 @@ export default function PlatformHealthCard() {
 
   const load = useCallback(async () => {
     try {
+      setLoading(true);
       const r = await fetch("/api/platform-health");
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const j = await r.json();
-      setData(j);
+      setData(await r.json());
       setError(null);
     } catch (e) {
       setError(e?.message || "failed");
@@ -59,16 +74,18 @@ export default function PlatformHealthCard() {
   }, []);
 
   const u = data?.user;
+  const a = data?.admin;
 
   return (
     <div className="card bg-base-100 shadow border border-base-300">
       <div className="card-body">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 className="card-title text-lg">Platform health</h3>
+            <h3 className="card-title text-lg">Your signal feed</h3>
             <p className="text-xs opacity-70">
-              Quality is measured against each trade&apos;s own odds — not a
-              marketing win percentage.
+              Live across {u?.symbols_watched ?? "—"} symbols. Quality is
+              measured against each trade&apos;s own odds — not a marketing win
+              percentage.
             </p>
           </div>
           <button type="button" className="btn btn-xs btn-ghost" onClick={load}>
@@ -77,50 +94,60 @@ export default function PlatformHealthCard() {
         </div>
 
         {loading ? (
-          <div className="text-sm opacity-70">Loading health…</div>
+          <div className="text-sm opacity-70">Loading…</div>
         ) : error ? (
           <div className="text-sm opacity-70">
-            Health unavailable ({error}). Signals still run independently.
+            Stats unavailable ({error}). Signals still run independently.
           </div>
         ) : (
           <>
+            {/* Product metrics — all users */}
             <div className="stats stats-vertical sm:stats-horizontal shadow bg-base-200 w-full">
               <div className="stat py-2">
-                <div className="stat-title text-xs">Coverage 24h</div>
-                <div className="stat-value text-xl">
-                  {pct(u?.sweep_coverage_24h)}
+                <div className="stat-title text-xs">Alerts (7d)</div>
+                <div className="stat-value text-xl">{u?.signals_7d ?? "—"}</div>
+                <div className="stat-desc">
+                  {u?.signals_24h ?? "—"} in the last 24h
                 </div>
-                <div className="stat-desc">15-min sweep slots</div>
               </div>
               <div className="stat py-2">
-                <div className="stat-title text-xs">Expiry 7d</div>
-                <div className="stat-value text-xl">
-                  {pct(u?.expiry_share_7d)}
-                </div>
-                <div className="stat-desc">closed with no TP/SL</div>
+                <div className="stat-title text-xs">Last alert</div>
+                <div className="stat-value text-xl">{ago(u?.last_signal_at)}</div>
+                <div className="stat-desc">most recent setup</div>
               </div>
               <div className="stat py-2">
-                <div className="stat-title text-xs">Edge vs odds</div>
+                <div className="stat-title text-xs">Settled (7d)</div>
+                <div className="stat-value text-xl">{u?.settled_7d ?? "—"}</div>
+                <div className="stat-desc">hit target or stop</div>
+              </div>
+              <div className="stat py-2">
+                <div className="stat-title text-xs">Vs odds</div>
                 <div className="stat-value text-xl">
-                  {signed(u?.edge_vs_no_skill_7d)}
+                  {signed(u?.edge_vs_odds_7d)}
                 </div>
                 <div className="stat-desc">above 0 beats the bracket</div>
               </div>
-              <div className="stat py-2">
-                <div className="stat-title text-xs">Settlement</div>
-                <div className="stat-value text-xl">
-                  {u?.eod_resolver_ok === true
-                    ? "OK"
-                    : u?.eod_resolver_ok === false
-                      ? "Lagging"
-                      : "—"}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              <div className="rounded-lg border border-base-300 px-3 py-2">
+                <div className="text-xs opacity-60">Target hits</div>
+                <div className="text-lg font-semibold">
+                  {pct(u?.target_hit_rate_7d)}
                 </div>
-                <div className="stat-desc">EOD outcome writes</div>
+                <div className="text-xs opacity-60">of settled outcomes</div>
+              </div>
+              <div className="rounded-lg border border-base-300 px-3 py-2">
+                <div className="text-xs opacity-60">Stalled (no target/stop)</div>
+                <div className="text-lg font-semibold">
+                  {pct(u?.stalled_share_7d)}
+                </div>
+                <div className="text-xs opacity-60">of closed this week</div>
               </div>
             </div>
 
             {Array.isArray(u?.improvements) && u.improvements.length > 0 ? (
-              <ul className="mt-2 space-y-2">
+              <ul className="mt-3 space-y-2">
                 {u.improvements.map((item) => (
                   <li
                     key={item.id}
@@ -131,6 +158,44 @@ export default function PlatformHealthCard() {
                   </li>
                 ))}
               </ul>
+            ) : null}
+
+            {/* Ops health — admin only */}
+            {a ? (
+              <div className="mt-4">
+                <h4 className="text-sm font-semibold uppercase opacity-70 mb-2">
+                  Ops health (admin)
+                </h4>
+                <div className="stats stats-vertical sm:stats-horizontal shadow bg-base-200 w-full">
+                  <div className="stat py-2">
+                    <div className="stat-title text-xs">Coverage 24h</div>
+                    <div className="stat-value text-lg">
+                      {pct(a.sweep_coverage_24h)}
+                    </div>
+                    <div className="stat-desc">
+                      15-min sweep slots ({a.slots_24h ?? "—"})
+                    </div>
+                  </div>
+                  <div className="stat py-2">
+                    <div className="stat-title text-xs">Settlement</div>
+                    <div className="stat-value text-lg">
+                      {a.eod_resolver_ok === true
+                        ? "OK"
+                        : a.eod_resolver_ok === false
+                          ? "Lagging"
+                          : "—"}
+                    </div>
+                    <div className="stat-desc">EOD outcome writes</div>
+                  </div>
+                  <div className="stat py-2">
+                    <div className="stat-title text-xs">Rank stamps</div>
+                    <div className="stat-value text-lg">
+                      {pct(a.rank_stamp_share_24h)}
+                    </div>
+                    <div className="stat-desc">kairos_rank_score coverage</div>
+                  </div>
+                </div>
+              </div>
             ) : null}
           </>
         )}

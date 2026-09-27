@@ -94,25 +94,33 @@ export async function GET() {
     }
   }
 
+  // User block: product language only (signals, settled outcomes, odds).
+  // Ops tiles (sweep coverage, settlement, rank stamps) stay admin-only.
   const userBlock = {
-    sweep_coverage_24h: round(health?.sweep_coverage_24h),
-    last_light_slot_at: health?.generated_at ?? null,
-    expiry_share_7d: round(health?.expiry_share_7d),
-    edge_vs_no_skill_7d: round(health?.edge_vs_no_skill_7d),
-    eod_resolver_ok: health ? Boolean(health.eod_resolver_ok) : null,
+    signals_24h: health?.qualified_24h ?? null,
+    signals_7d: health?.qualified_7d ?? null,
+    last_signal_at: health?.last_signal_at ?? null,
+    symbols_watched: health?.symbols_active ?? null,
+    settled_7d: health?.decided_7d ?? null,
+    target_hit_rate_7d: round(health?.tp_rate_7d),
+    stalled_share_7d: round(health?.expiry_share_7d),
+    edge_vs_odds_7d: round(health?.edge_vs_no_skill_7d),
     improvements: IMPROVEMENTS,
   };
 
   const adminBlock = isAdmin
     ? {
-        decided_7d: health?.decided_7d ?? null,
-        tp_rate_7d: round(health?.tp_rate_7d),
-        edge_vs_no_skill_7d: round(health?.edge_vs_no_skill_7d),
-        expiry_share_7d: round(health?.expiry_share_7d),
+        // ops health (not shown to members)
+        sweep_coverage_24h: round(health?.sweep_coverage_24h),
+        eod_resolver_ok: health ? Boolean(health.eod_resolver_ok) : null,
         rank_stamp_share_24h: round(health?.rank_stamp_share_24h),
         rows_24h: health?.rows_24h ?? null,
         slots_24h: health?.slots_24h ?? null,
         last_calibration_closed_at: health?.last_calibration_closed_at ?? null,
+        decided_7d: health?.decided_7d ?? null,
+        tp_rate_7d: round(health?.tp_rate_7d),
+        expiry_share_7d: round(health?.expiry_share_7d),
+        edge_vs_no_skill_7d: round(health?.edge_vs_no_skill_7d),
         roadmap,
         source: "v_platform_health_summary",
         era_note:

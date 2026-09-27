@@ -79,7 +79,7 @@ export default function WidgetPlatformQuality() {
         <div className="stat">
           <div className="stat-title">Coverage 24h</div>
           <div className="stat-value text-primary">
-            {loading ? "…" : pct(u?.sweep_coverage_24h)}
+            {loading ? "…" : pct(a?.sweep_coverage_24h)}
           </div>
           <div className="stat-desc">
             {a ? `${a.slots_24h ?? "—"} slots · ${a.rows_24h ?? "—"} rows` : "sweep slots"}
@@ -87,13 +87,15 @@ export default function WidgetPlatformQuality() {
         </div>
         <div className="stat">
           <div className="stat-title">Expiry 7d</div>
-          <div className="stat-value">{loading ? "…" : pct(u?.expiry_share_7d)}</div>
+          <div className="stat-value">
+            {loading ? "…" : pct(a?.expiry_share_7d)}
+          </div>
           <div className="stat-desc">closed with no TP/SL</div>
         </div>
         <div className="stat">
           <div className="stat-title">Edge vs odds</div>
           <div className="stat-value">
-            {loading ? "…" : signed(u?.edge_vs_no_skill_7d)}
+            {loading ? "…" : signed(a?.edge_vs_no_skill_7d)}
           </div>
           <div className="stat-desc">scorecard D · publishable quality</div>
         </div>
