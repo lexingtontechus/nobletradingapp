@@ -26,6 +26,20 @@ function round(n, d = 3) {
   return Math.round(Number(n) * p) / p;
 }
 
+/** Period-over-period: { value, prev, pct } — pct = (cur-prev)/|prev|. */
+function delta(cur, prev) {
+  const c = Number(cur);
+  const p = Number(prev);
+  if (!Number.isFinite(c) || !Number.isFinite(p) || p === 0) {
+    return { value: round(cur), prev: round(prev), pct: null };
+  }
+  return {
+    value: round(cur),
+    prev: round(prev),
+    pct: round((c - p) / Math.abs(p), 4),
+  };
+}
+
 const IMPROVEMENTS = [
   {
     id: "geometry",
@@ -94,17 +108,17 @@ export async function GET() {
     }
   }
 
-  // User block: product language only (signals, settled outcomes, odds).
+  // User block: product language only (signals, W/L, vs odds).
   // Ops tiles (sweep coverage, settlement, rank stamps) stay admin-only.
   const userBlock = {
     signals_24h: health?.qualified_24h ?? null,
-    signals_7d: health?.qualified_7d ?? null,
+    signals_7d: delta(health?.qualified_7d, health?.qualified_7d_prev),
     last_signal_at: health?.last_signal_at ?? null,
     symbols_watched: health?.symbols_active ?? null,
     settled_7d: health?.decided_7d ?? null,
-    target_hit_rate_7d: round(health?.tp_rate_7d),
-    stalled_share_7d: round(health?.expiry_share_7d),
-    edge_vs_odds_7d: round(health?.edge_vs_no_skill_7d),
+    win_rate_7d: delta(health?.tp_rate_7d, health?.tp_rate_7d_prev),
+    expired_share_7d: delta(health?.expiry_share_7d, health?.expiry_share_7d_prev),
+    edge_vs_odds_7d: delta(health?.edge_vs_no_skill_7d, health?.edge_vs_no_skill_7d_prev),
     improvements: IMPROVEMENTS,
   };
 

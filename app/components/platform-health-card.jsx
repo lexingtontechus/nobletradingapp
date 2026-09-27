@@ -21,6 +21,16 @@ function signed(n) {
   return `${v > 0 ? "+" : ""}${v.toFixed(2)}`;
 }
 
+function deltaLabel(d) {
+  if (!d || d.pct == null || Number.isNaN(Number(d.pct))) return null;
+  const pct = Number(d.pct);
+  return (
+    <span className={pct >= 0 ? "text-success" : "text-error"}>
+      {pct >= 0 ? "▲" : "▼"} {Math.abs(pct * 100).toFixed(0)}% vs prior 7d
+    </span>
+  );
+}
+
 function ago(iso) {
   if (!iso) return "—";
   const t = Date.parse(iso);
@@ -105,9 +115,12 @@ export default function PlatformHealthCard() {
             <div className="stats stats-vertical sm:stats-horizontal shadow bg-base-200 w-full">
               <div className="stat py-2">
                 <div className="stat-title text-xs">Alerts (7d)</div>
-                <div className="stat-value text-xl">{u?.signals_7d ?? "—"}</div>
+                <div className="stat-value text-xl">
+                  {u?.signals_7d?.value ?? "—"}
+                </div>
                 <div className="stat-desc">
-                  {u?.signals_24h ?? "—"} in the last 24h
+                  {u?.signals_24h ?? "—"} in the last 24h{" "}
+                  {deltaLabel(u?.signals_7d)}
                 </div>
               </div>
               <div className="stat py-2">
@@ -118,31 +131,37 @@ export default function PlatformHealthCard() {
               <div className="stat py-2">
                 <div className="stat-title text-xs">Settled (7d)</div>
                 <div className="stat-value text-xl">{u?.settled_7d ?? "—"}</div>
-                <div className="stat-desc">hit target or stop</div>
+                <div className="stat-desc">W or L (not expired)</div>
               </div>
               <div className="stat py-2">
                 <div className="stat-title text-xs">Vs odds</div>
                 <div className="stat-value text-xl">
-                  {signed(u?.edge_vs_odds_7d)}
+                  {signed(u?.edge_vs_odds_7d?.value)}
                 </div>
-                <div className="stat-desc">above 0 beats the bracket</div>
+                <div className="stat-desc">
+                  above 0 beats the bracket {deltaLabel(u?.edge_vs_odds_7d)}
+                </div>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-2 mt-2">
               <div className="rounded-lg border border-base-300 px-3 py-2">
-                <div className="text-xs opacity-60">Target hits</div>
+                <div className="text-xs opacity-60">Win rate (W/L)</div>
                 <div className="text-lg font-semibold">
-                  {pct(u?.target_hit_rate_7d)}
+                  {pct(u?.win_rate_7d?.value)}
                 </div>
-                <div className="text-xs opacity-60">of settled outcomes</div>
+                <div className="text-xs opacity-60">
+                  of settled {deltaLabel(u?.win_rate_7d)}
+                </div>
               </div>
               <div className="rounded-lg border border-base-300 px-3 py-2">
-                <div className="text-xs opacity-60">Stalled (no target/stop)</div>
+                <div className="text-xs opacity-60">Expired</div>
                 <div className="text-lg font-semibold">
-                  {pct(u?.stalled_share_7d)}
+                  {pct(u?.expired_share_7d?.value)}
                 </div>
-                <div className="text-xs opacity-60">of closed this week</div>
+                <div className="text-xs opacity-60">
+                  no W/L {deltaLabel(u?.expired_share_7d)}
+                </div>
               </div>
             </div>
 

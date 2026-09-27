@@ -340,7 +340,29 @@ function patternLabel(pattern) {
 
 // -- Components --
 
-function StatCard({ title, value, sub, tone, valueClassName }) {
+function formatLastAlert(iso) {
+  if (!iso) return "\u2014";
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return "\u2014";
+  const m = Math.max(0, Math.round((Date.now() - t) / 60000));
+  if (m < 60) return m + "m ago";
+  const h = Math.round(m / 60);
+  if (h < 48) return h + "h ago";
+  return Math.round(h / 24) + "d ago";
+}
+
+function StatCard({ title, value, sub, tone, valueClassName, deltaPct }) {
+  const deltaNode =
+    deltaPct == null || Number.isNaN(Number(deltaPct)) ? null : (
+      <span
+        className={
+          Number(deltaPct) >= 0 ? "text-success" : "text-error"
+        }
+      >
+        {Number(deltaPct) >= 0 ? "▲" : "▼"}{" "}
+        {Math.abs(Number(deltaPct) * 100).toFixed(0)}%
+      </span>
+    );
   return (
     <div className="card bg-base-200 shadow-sm border border-base-300">
       <div className="card-body p-4">
@@ -362,7 +384,11 @@ function StatCard({ title, value, sub, tone, valueClassName }) {
         >
           {value}
         </div>
-        {sub && <p className="text-xs opacity-60 mt-1">{sub}</p>}
+        {sub && (
+          <p className="text-xs opacity-60 mt-1">
+            {sub} {deltaNode}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -2243,6 +2269,7 @@ export default function DashboardPage() {
   const [portfolioStats, setPortfolioStats] = useState(null);
   const [renkoBricks, setRenkoBricks] = useState([]);
   const [kellyRows, setKellyRows] = useState([]);
+  const [health, setHealth] = useState(null);
   const [paperEquity, setPaperEquity] = useState([]);
 
   useEffect(() => {
@@ -2312,6 +2339,12 @@ export default function DashboardPage() {
         setPortfolioStats(j.portfolioStats ?? null);
         setRenkoBricks(j.renkoBricks ?? []);
         setKellyRows(j.kelly ?? []);
+        fetch("/api/platform-health")
+          .then((r) => (r.ok ? r.json() : null))
+          .then((h) => {
+            if (h) setHealth(h);
+          })
+          .catch(() => {});
         setPaperEquity(j.paperEquity ?? []);
         // Seed liveSignals from the initial fetch too — otherwise a symbol
         // that qualified before this page load (and hasn't had a fresh
@@ -2535,27 +2568,29 @@ export default function DashboardPage() {
             title="Plan"
             value={isPro ? "Precision Pro" : "Signal Scout"}
             sub={
-              "Subscription " +
+              `${resolvedSymbolList.length || health?.user?.symbols_watched || "—"} symbols · ` +
               (subscriptionStatus === "active"
                 ? "Active"
                 : subscriptionStatus === "grace"
                   ? "Grace"
-                  : "Inactive") +
-              " · Token Valid"
+                  : "Inactive")
             }
           />
           <StatCard
-            title="Symbols"
-            value={String(resolvedSymbolList.length || "\u2014")}
-            sub={isPro ? "Precision Pro" : "Signal Scout"}
+            title="Alerts"
+            value={String(health?.user?.signals_7d?.value ?? "\u2014")}
+            sub="Last 7 days"
+            deltaPct={health?.user?.signals_7d?.pct}
           />
           <StatCard
             title="Realtime"
-            value={wsStatus === "connected" ? "Live" : wsStatus === "error" ? "Error" : "Connecting"}
+            value={formatLastAlert(health?.user?.last_signal_at)}
             sub={
               wsStatus === "connected"
-                ? `Signals (${planTitle || "loading"} · Realtime ✓)`
-                : `Signals (${planTitle || "loading"} · REST poll 60s)`
+                ? "Live feed"
+                : wsStatus === "error"
+                  ? "Feed error"
+                  : "Connecting"
             }
             tone={wsStatus === "connected" ? "pos" : wsStatus === "error" ? "neg" : "warn"}
           />
