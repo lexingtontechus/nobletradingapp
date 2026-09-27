@@ -64,22 +64,21 @@ export async function POST() {
     if (!email) {
       return NextResponse.json({ error: "No email on Clerk user" }, { status: 400 })
     }
-    await supabase.from("users").upsert(
-      {
-        clerk_user_id: userId,
-        email,
-        role:
-          u.publicMetadata?.role === "admin" ||
-          u.privateMetadata?.role === "admin"
-            ? "admin"
-            : "member"
-      },
-      { onConflict: "clerk_user_id" }
-    )
     const { data: nu } = await supabase
       .from("users")
+      .upsert(
+        {
+          clerk_user_id: userId,
+          email,
+          role:
+            u.publicMetadata?.role === "admin" ||
+            u.privateMetadata?.role === "admin"
+              ? "admin"
+              : "member"
+        },
+        { onConflict: "clerk_user_id" }
+      )
       .select("id")
-      .eq("clerk_user_id", userId)
       .single()
     user = nu
   }

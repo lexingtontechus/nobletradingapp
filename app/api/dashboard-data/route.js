@@ -31,7 +31,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
-import { checkRole } from "@/utils/roles";
+import { roleFromLocalUser, checkRole } from "@/utils/roles";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -55,15 +55,16 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Do NOT call Clerk unless role is unknown (checkRole → clerkClient.getUser
+  // is ~1s and was firing for every member on every dashboard load).
   const { data: localUser } = await supabase
     .from("users")
     .select("id, role")
     .eq("clerk_user_id", userId)
     .maybeSingle();
 
-  // users.role is a lazy mirror; fall back to Clerk metadata (public|private).
-  let isAdmin = localUser?.role === "admin";
-  if (!isAdmin) {
+  let isAdmin = roleFromLocalUser(localUser, "admin");
+  if (isAdmin == null) {
     try {
       isAdmin = await checkRole("admin");
     } catch {
@@ -149,7 +150,8 @@ export async function GET() {
       .from("v_talaria_renko")
       .select("*")
       .order("session_date", { ascending: false })
-      .order("brick_index", { ascending: false }),
+      .order("brick_index", { ascending: false })
+      .limit(400),
     supabase.from("v_paper_vs_optimized_daily").select("*"),
     supabase.from("v_paper_vs_equalwt_aligned").select("*"),
     supabase.from("v_talaria_portfolio_stats").select("").maybeSingle(),
@@ -174,7 +176,8 @@ export async function GET() {
   const filteredRenko = safeData(renkoRes).filter((b) => planSymbolSet.has(b.symbol));
   const kellyRows = safeData(kellyRes).filter((r) => planSymbolSet.has(r.symbol));
 
-  return NextResponse.json({
+  return NextResponse.json(
+    {
     sweeps: filteredSweeps,
     signalHealth: safeData(healthRes),
     calibration: safeData(calibrationRes),
@@ -192,5 +195,7 @@ export async function GET() {
     planSlug,
     isPro,
     isAdmin,
-  });
+    },
+    { headers: { "Cache-Control": "private, max-age=15" } }
+  );
 }

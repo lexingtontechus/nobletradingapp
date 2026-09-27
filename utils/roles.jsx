@@ -1,5 +1,16 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 
+/**
+ * Fast role check from the local users row — never hits Clerk.
+ * Returns true/false when role is known, or null when unknown (caller
+ * may fall back to checkRole()).
+ */
+export function roleFromLocalUser(localUser, role) {
+  if (!localUser) return null;
+  if (localUser.role) return localUser.role === role;
+  return null;
+}
+
 export const checkRole = async (role) => {
   const { userId, sessionClaims } = await auth();
   // Fast path — role embedded in session claims (custom JWT template).

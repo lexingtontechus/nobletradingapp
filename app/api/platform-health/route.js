@@ -2,17 +2,17 @@
 // Noble Trading App — Next.js API Route: platform-health
 // =============================================================================
 //   GET /api/platform-health
-//   → user-safe quality/ops metrics (portal/dashboard PlatformHealthCard)
-//   → admin block only when users.role === 'admin'
+//   → user product metrics + admin ops metrics
 //
-// Reads v_platform_health_summary (migration 0018) — one pre-aggregated row.
-// Does NOT page nt_signal_sim (slow / load-heavy on the trading DB).
+// Reads v_platform_health_summary (one pre-aggregated row). Cached in-process
+// for 60s — the view scans nt_signal_sim and must not be hit per page load.
 // Missing view degrades to null metrics, never a 500.
 // =============================================================================
 
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
+import { roleFromLocalUser, checkRole } from "@/utils/roles";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -20,13 +20,15 @@ const supabase = createClient(
   { auth: { persistSession: false } }
 );
 
+const HEALTH_TTL_MS = 60_000;
+let healthCache = { at: 0, data: null };
+
 function round(n, d = 3) {
   if (n === null || n === undefined || Number.isNaN(Number(n))) return null;
   const p = 10 ** d;
   return Math.round(Number(n) * p) / p;
 }
 
-/** Period-over-period: { value, prev, pct } — pct = (cur-prev)/|prev|. */
 function delta(cur, prev) {
   const c = Number(cur);
   const p = Number(prev);
@@ -67,21 +69,11 @@ const IMPROVEMENTS = [
   },
 ];
 
-export async function GET() {
-  const { userId } = await auth();
-  if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+async function loadHealth() {
+  const now = Date.now();
+  if (healthCache.data && now - healthCache.at < HEALTH_TTL_MS) {
+    return healthCache.data;
   }
-
-  const { data: localUser } = await supabase
-    .from("users")
-    .select("id, role")
-    .eq("clerk_user_id", userId)
-    .maybeSingle();
-
-  const isAdmin = localUser?.role === "admin";
-
-  // Single-row aggregate view — no table scans from this process.
   let health = null;
   try {
     const { data } = await supabase
@@ -91,6 +83,31 @@ export async function GET() {
     health = data || null;
   } catch {
     health = null;
+  }
+  healthCache = { at: now, data: health };
+  return health;
+}
+
+export async function GET() {
+  const { userId } = await auth();
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const [localRes, health] = await Promise.all([
+    supabase.from("users").select("id, role").eq("clerk_user_id", userId).maybeSingle(),
+    loadHealth(),
+  ]);
+  const localUser = localRes?.data;
+
+  // Fast path from users.role; Clerk only when role is unknown.
+  let isAdmin = roleFromLocalUser(localUser, "admin");
+  if (isAdmin == null) {
+    try {
+      isAdmin = await checkRole("admin");
+    } catch {
+      isAdmin = false;
+    }
   }
 
   let roadmap = [];
@@ -108,8 +125,6 @@ export async function GET() {
     }
   }
 
-  // User block: product language only (signals, W/L, vs odds).
-  // Ops tiles (sweep coverage, settlement, rank stamps) stay admin-only.
   const userBlock = {
     signals_24h: health?.qualified_24h ?? null,
     signals_7d: delta(health?.qualified_7d, health?.qualified_7d_prev),
@@ -124,7 +139,6 @@ export async function GET() {
 
   const adminBlock = isAdmin
     ? {
-        // ops health (not shown to members)
         sweep_coverage_24h: round(health?.sweep_coverage_24h),
         eod_resolver_ok: health ? Boolean(health.eod_resolver_ok) : null,
         rank_stamp_share_24h: round(health?.rank_stamp_share_24h),
@@ -142,9 +156,12 @@ export async function GET() {
       }
     : undefined;
 
-  return NextResponse.json({
-    generated_at: health?.generated_at || new Date().toISOString(),
-    user: userBlock,
-    ...(adminBlock ? { admin: adminBlock } : {}),
-  });
+  return NextResponse.json(
+    {
+      generated_at: health?.generated_at || new Date().toISOString(),
+      user: userBlock,
+      ...(adminBlock ? { admin: adminBlock } : {}),
+    },
+    { headers: { "Cache-Control": "private, max-age=30" } }
+  );
 }

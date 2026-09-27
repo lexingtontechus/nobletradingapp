@@ -84,52 +84,55 @@ export async function GET() {
     )
   }
 
-  // 2. Most recent active/grace/pending subscription
-  const { data: subscription } = await supabase
-    .from("subscriptions")
-    .select(
-      `
-      id, status, current_period_start, current_period_end, grace_period_end,
-      helio_paylink_id,
-      next_charge_url, next_charge_token, next_charge_expires_at,
-      helio_email, helio_discord_id, helio_discord_username,
-      reminder_count, last_reminder_sent_at, cancelled_at, created_at,
-      plans(id, title, description, price_cents, currency, interval,
-            helio_paylink_id, slug)
-    `
-    )
-    .eq("user_id", localUser.id)
-    .in("status", ["pending", "active", "grace"])
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  // 2–3. Subscription + payments in parallel (were sequential ~2 RTTs)
+  const [subRes, payRes] = await Promise.all([
+    supabase
+      .from("subscriptions")
+      .select(
+        `id, status, current_period_start, current_period_end, grace_period_end,
+         helio_paylink_id,
+         next_charge_url, next_charge_token, next_charge_expires_at,
+         helio_email, helio_discord_id, helio_discord_username,
+         reminder_count, last_reminder_sent_at, cancelled_at, created_at,
+         plans(id, title, description, price_cents, currency, interval,
+               helio_paylink_id, slug)`
+      )
+      .eq("user_id", localUser.id)
+      .in("status", ["pending", "active", "grace"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("payment_transactions")
+      .select(
+        "id, amount_cents, amount_decimal, token_symbol, is_renewal, paid_at, status"
+      )
+      .eq("user_id", localUser.id)
+      .order("paid_at", { ascending: false })
+      .limit(10),
+  ]);
+  const subscription = subRes?.data ?? null;
+  const payments = payRes?.data ?? [];
 
-  // 3. Payment history (last 10)
-  const { data: payments } = await supabase
-    .from("payment_transactions")
-    .select(
-      "id, amount_cents, amount_decimal, token_symbol, is_renewal, paid_at, status"
-    )
-    .eq("user_id", localUser.id)
-    .order("paid_at", { ascending: false })
-    .limit(10)
-
-  // 4. Recent events (last 5)
-  let events = []
+  // 4. Recent events (last 5) — needs subscription.id
+  let events = [];
   if (subscription) {
     const { data: ev } = await supabase
       .from("subscription_events")
       .select("event_type, amount_cents, currency, received_at")
       .eq("subscription_id", subscription.id)
       .order("received_at", { ascending: false })
-      .limit(5)
-    events = ev ?? []
+      .limit(5);
+    events = ev ?? [];
   }
 
-  return NextResponse.json({
-    user: localUser,
-    subscription,
-    payments: payments ?? [],
-    events
-  })
+  return NextResponse.json(
+    {
+      user: localUser,
+      subscription,
+      payments,
+      events,
+    },
+    { headers: { "Cache-Control": "private, max-age=15" } }
+  );
 }
