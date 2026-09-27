@@ -64,23 +64,30 @@ export async function POST() {
     if (!email) {
       return NextResponse.json({ error: "No email on Clerk user" }, { status: 400 })
     }
-    const { data: nu } = await supabase
+    const role =
+      u.publicMetadata?.role === "admin" || u.privateMetadata?.role === "admin"
+        ? "admin"
+        : "member"
+    const { data: nu, error: upErr } = await supabase
       .from("users")
-      .upsert(
-        {
-          clerk_user_id: userId,
-          email,
-          role:
-            u.publicMetadata?.role === "admin" ||
-            u.privateMetadata?.role === "admin"
-              ? "admin"
-              : "member"
-        },
-        { onConflict: "clerk_user_id" }
-      )
+      .upsert({ clerk_user_id: userId, email, role }, { onConflict: "clerk_user_id" })
       .select("id")
-      .single()
+      .maybeSingle()
     user = nu
+    if (!user?.id) {
+      const { data: again } = await supabase
+        .from("users")
+        .select("id")
+        .eq("clerk_user_id", userId)
+        .maybeSingle()
+      user = again
+    }
+    if (!user?.id) {
+      return NextResponse.json(
+        { error: upErr?.message || "user_row_missing" },
+        { status: 500 }
+      )
+    }
   }
 
   // 3. Most recent subscription that currently entitles access (active/grace)

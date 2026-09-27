@@ -32,6 +32,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
 import { roleFromLocalUser, checkRole } from "@/utils/roles";
+import { cached } from "@/utils/api-cache";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -114,55 +115,88 @@ export async function GET() {
   }
 
   const isPro = isAdmin || planSlug === "precision_pro";
+  const cacheKey = `dash:${isAdmin ? "admin" : planSlug || "none"}:${isPro ? "pro" : "std"}`;
 
-  // Admins: all active symbols. Members: plan_ids @> {uuid} on uuid[].
-  // A failed filter must not wipe the dashboard.
-  let symbolsQuery = supabase
-    .from("v_talaria_symbols")
-    .select("*")
-    .eq("active", true);
-  if (!isAdmin && planUuid) {
-    symbolsQuery = symbolsQuery.filter("plan_ids", "cs", `{${planUuid}}`);
-  }
-
-  const [
-    sweepsRes,
-    healthRes,
-    calibrationRes,
-    calibrationBoardRes,
-    outcomeBySideRes,
-    renkoRes,
-    vsEqualRes,
-    vsEqualAlignedRes,
-    portfolioRes,
-    symbolsRes,
-    kellyRes,
-    paperPositionsRes,
-    paperEquityRes,
-    vsEqualSymbolRes,
-  ] = await Promise.all([
-    supabase.from("v_talaria_latest_signals").select("*"),
-    supabase.from("v_talaria_signal_health").select("*"),
-    supabase.from("v_eod_calibration_bias_latest").select("*"),
-    supabase.from("v_calibration_confidence_board").select("*"),
-    supabase.from("v_signal_outcome_by_side").select("*").eq("qualified", true),
-    supabase
-      .from("v_talaria_renko")
+  // One in-process cache for the heavy parallel fan-out (PostgREST is 0.5–2s
+  // per view even when warm — dashboard used to take 8–10s).
+  const bundle = await cached(cacheKey, 20_000, async () => {
+    let symbolsQuery = supabase
+      .from("v_talaria_symbols")
       .select("*")
-      .order("session_date", { ascending: false })
-      .order("brick_index", { ascending: false })
-      .limit(400),
-    supabase.from("v_paper_vs_optimized_daily").select("*"),
-    supabase.from("v_paper_vs_equalwt_aligned").select("*"),
-    supabase.from("v_talaria_portfolio_stats").select("").maybeSingle(),
-    symbolsQuery,
-    supabase.from("v_talaria_kelly_by_symbol").select("*"),
-    isPro ? supabase.from("v_paper_positions").select("*") : { data: [] },
-    isPro ? supabase.from("v_paper_equity").select("*") : { data: [] },
-    isPro ? supabase.from("v_paper_vs_optimized_symbol").select("*") : { data: [] },
-  ]);
+      .eq("active", true);
+    if (!isAdmin && planUuid) {
+      symbolsQuery = symbolsQuery.filter("plan_ids", "cs", `{${planUuid}}`);
+    }
 
-  let symbolsData = safeData(symbolsRes);
+    const [
+      sweepsRes,
+      healthRes,
+      calibrationRes,
+      calibrationBoardRes,
+      outcomeBySideRes,
+      renkoRes,
+      vsEqualRes,
+      vsEqualAlignedRes,
+      portfolioRes,
+      symbolsRes,
+      paperPositionsRes,
+      paperEquityRes,
+      vsEqualSymbolRes,
+    ] = await Promise.all([
+      supabase.from("v_talaria_latest_signals").select("*"),
+      supabase.from("v_talaria_signal_health").select("*"),
+      supabase.from("v_eod_calibration_bias_latest").select("*"),
+      supabase.from("v_calibration_confidence_board").select("*"),
+      supabase.from("v_signal_outcome_by_side").select("*").eq("qualified", true),
+      supabase
+        .from("v_talaria_renko")
+        .select("*")
+        .order("session_date", { ascending: false })
+        .order("brick_index", { ascending: false })
+        .limit(400),
+      supabase.from("v_paper_vs_optimized_daily").select("*"),
+      supabase.from("v_paper_vs_equalwt_aligned").select("*"),
+      supabase.from("v_talaria_portfolio_stats").select("").maybeSingle(),
+      symbolsQuery,
+      isPro ? supabase.from("v_paper_positions").select("*") : { data: [] },
+      isPro ? supabase.from("v_paper_equity").select("*") : { data: [] },
+      isPro ? supabase.from("v_paper_vs_optimized_symbol").select("*") : { data: [] },
+    ]);
+
+    return {
+      sweeps: safeData(sweepsRes),
+      signalHealth: safeData(healthRes),
+      calibration: safeData(calibrationRes),
+      calibrationBoard: safeData(calibrationBoardRes),
+      outcomeBySide: safeData(outcomeBySideRes),
+      renkoBricks: safeData(renkoRes),
+      vsEqual: safeData(vsEqualRes),
+      vsEqualAligned: safeData(vsEqualAlignedRes),
+      portfolioStats: safeSingle(portfolioRes),
+      symbols: safeData(symbolsRes),
+      paperPositions: safeData(paperPositionsRes),
+      paperEquity: safeData(paperEquityRes),
+      vsEqualSymbol: safeData(vsEqualSymbolRes),
+    };
+  });
+
+  const {
+    sweeps: sweepsAll,
+    signalHealth: healthAll,
+    calibration: calAll,
+    calibrationBoard: boardAll,
+    outcomeBySide: outcomeAll,
+    renkoBricks: renkoAll,
+    vsEqual,
+    vsEqualAligned,
+    portfolioStats,
+    symbols: symbolsAll,
+    paperPositions,
+    paperEquity,
+    vsEqualSymbol,
+  } = bundle;
+
+  let symbolsData = symbolsAll;
   if (symbolsData.length === 0) {
     const { data: allActive } = await supabase
       .from("v_talaria_symbols")
@@ -172,29 +206,30 @@ export async function GET() {
   }
   const planSymbolSet = new Set(symbolsData.map((s) => s.symbol));
 
-  const filteredSweeps = safeData(sweepsRes).filter((s) => planSymbolSet.has(s.symbol));
-  const filteredRenko = safeData(renkoRes).filter((b) => planSymbolSet.has(b.symbol));
-  const kellyRows = safeData(kellyRes).filter((r) => planSymbolSet.has(r.symbol));
+  const filteredSweeps = sweepsAll.filter((s) => planSymbolSet.has(s.symbol));
+  const filteredRenko = renkoAll.filter((b) => planSymbolSet.has(b.symbol));
+  // Kelly table is the same rows as latest_signals — no second round-trip.
+  const kellyRows = filteredSweeps;
 
   return NextResponse.json(
     {
-    sweeps: filteredSweeps,
-    signalHealth: safeData(healthRes),
-    calibration: safeData(calibrationRes),
-    calibrationBoard: safeData(calibrationBoardRes).filter((r) => planSymbolSet.has(r.symbol)),
-    outcomeBySide: safeData(outcomeBySideRes).filter((r) => planSymbolSet.has(r.symbol)),
-    vsEqual: isPro ? safeData(vsEqualRes) : [],
-    vsEqualAligned: safeData(vsEqualAlignedRes),
-    vsEqualSymbol: isPro ? safeData(vsEqualSymbolRes) : [],
-    portfolioStats: isPro ? safeSingle(portfolioRes) : null,
-    renkoBricks: filteredRenko,
-    kelly: kellyRows,
-    symbols: symbolsData,
-    paperPositions: isPro ? safeData(paperPositionsRes) : [],
-    paperEquity: isPro ? safeData(paperEquityRes) : [],
-    planSlug,
-    isPro,
-    isAdmin,
+      sweeps: filteredSweeps,
+      signalHealth: healthAll,
+      calibration: calAll,
+      calibrationBoard: boardAll.filter((r) => planSymbolSet.has(r.symbol)),
+      outcomeBySide: outcomeAll.filter((r) => planSymbolSet.has(r.symbol)),
+      vsEqual: isPro ? vsEqual : [],
+      vsEqualAligned,
+      vsEqualSymbol: isPro ? vsEqualSymbol : [],
+      portfolioStats: isPro ? portfolioStats : null,
+      renkoBricks: filteredRenko,
+      kelly: kellyRows,
+      symbols: symbolsData,
+      paperPositions: isPro ? paperPositions : [],
+      paperEquity: isPro ? paperEquity : [],
+      planSlug,
+      isPro,
+      isAdmin,
     },
     { headers: { "Cache-Control": "private, max-age=15" } }
   );
