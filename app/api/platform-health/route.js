@@ -4,8 +4,8 @@
 //   GET /api/platform-health
 //   → user product metrics + admin ops metrics
 //
-// Reads v_platform_health_summary (one pre-aggregated row). Cached in-process
-// for 60s — the view scans nt_signal_sim and must not be hit per page load.
+// Prefers health from talaria_dashboard_cache (refreshed every 2 min).
+// Falls back to v_platform_health_summary. In-process cache 60s.
 // Missing view degrades to null metrics, never a 500.
 // =============================================================================
 
@@ -13,15 +13,13 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
 import { roleFromLocalUser, checkRole } from "@/utils/roles";
+import { cached } from "@/utils/api-cache";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY,
   { auth: { persistSession: false } }
 );
-
-const HEALTH_TTL_MS = 60_000;
-let healthCache = { at: 0, data: null };
 
 function round(n, d = 3) {
   if (n === null || n === undefined || Number.isNaN(Number(n))) return null;
@@ -70,22 +68,28 @@ const IMPROVEMENTS = [
 ];
 
 async function loadHealth() {
-  const now = Date.now();
-  if (healthCache.data && now - healthCache.at < HEALTH_TTL_MS) {
-    return healthCache.data;
-  }
-  let health = null;
-  try {
-    const { data } = await supabase
-      .from("v_platform_health_summary")
-      .select("*")
-      .maybeSingle();
-    health = data || null;
-  } catch {
-    health = null;
-  }
-  healthCache = { at: now, data: health };
-  return health;
+  return cached("platform-health-row", 60_000, async () => {
+    // Prefer the dashboard bundle cache (one tiny row).
+    try {
+      const { data: cacheRow } = await supabase
+        .from("talaria_dashboard_cache")
+        .select("payload")
+        .eq("id", 1)
+        .maybeSingle();
+      if (cacheRow?.payload?.health) return cacheRow.payload.health;
+    } catch {
+      // fall through
+    }
+    try {
+      const { data } = await supabase
+        .from("v_platform_health_summary")
+        .select("*")
+        .maybeSingle();
+      return data || null;
+    } catch {
+      return null;
+    }
+  });
 }
 
 export async function GET() {
@@ -151,7 +155,7 @@ export async function GET() {
         expiry_share_7d: round(health?.expiry_share_7d),
         edge_vs_no_skill_7d: round(health?.edge_vs_no_skill_7d),
         roadmap,
-        source: "v_platform_health_summary",
+        source: health ? "talaria_dashboard_cache/v_platform_health_summary" : null,
         era_note:
           "Pre/post ATR and resolver-fix splits live in backend worklogs; do not pool eras for promote decisions.",
       }

@@ -16,12 +16,16 @@
 //       vsEqualSymbol: [...],       — v_paper_vs_optimized_symbol (Precision Pro only)
 //       portfolioStats: {...|null}, — v_talaria_portfolio_stats (Precision Pro only)
 //       renkoBricks: [...],         — v_talaria_renko (last 10 per symbol)
-//       kelly: [...],               — v_talaria_kelly_by_symbol (Analysis Kelly table)
+//       kelly: [...],               — derived from latest_signals (same rows)
 //       symbols: [...],             — v_talaria_symbols (plan-gated; admin = all active)
 //       paperPositions: [...],      — v_paper_positions (Precision Pro only)
 //       paperEquity: [...],         — v_paper_equity (Precision Pro only)
 //       planSlug, isPro, isAdmin
 //     }
+//
+// Perf: prefer the single-row talaria_dashboard_cache payload (refreshed by
+// pg_cron every 2 min). Live fan-out is only a cold-start fallback — 13
+// concurrent PostgREST view queries stampede to 6–10s under load.
 //
 // Admin: full roster + Pro analytics regardless of subscription/plan.
 // Members: plan_ids containment on v_talaria_symbols (uuid[] → cs.{uuid}).
@@ -50,64 +54,171 @@ function safeSingle(res) {
   return null;
 }
 
+function arr(v) {
+  return Array.isArray(v) ? v : [];
+}
+
+function emptyBundle() {
+  return {
+    sweeps: [],
+    signalHealth: [],
+    calibration: [],
+    calibrationBoard: [],
+    outcomeBySide: [],
+    renkoBricks: [],
+    vsEqual: [],
+    vsEqualAligned: [],
+    vsEqualSymbol: [],
+    portfolioStats: null,
+    kelly: [],
+    symbols: [],
+    paperPositions: [],
+    paperEquity: [],
+  };
+}
+
+async function loadCachedBundle() {
+  const { data, error } = await supabase
+    .from("talaria_dashboard_cache")
+    .select("payload, refreshed_at")
+    .eq("id", 1)
+    .maybeSingle();
+  if (error || !data?.payload) return null;
+  const p = data.payload;
+  return {
+    sweeps: arr(p.sweeps),
+    signalHealth: arr(p.signalHealth),
+    calibration: arr(p.calibration),
+    calibrationBoard: arr(p.calibrationBoard),
+    outcomeBySide: arr(p.outcomeBySide),
+    renkoBricks: arr(p.renkoBricks),
+    vsEqual: arr(p.vsEqual),
+    vsEqualAligned: arr(p.vsEqualAligned),
+    portfolioStats: p.portfolioStats ?? null,
+    symbols: arr(p.symbols),
+    paperPositions: arr(p.paperPositions),
+    paperEquity: arr(p.paperEquity),
+    vsEqualSymbol: arr(p.vsEqualSymbol),
+    health: p.health ?? null,
+    refreshed_at: data.refreshed_at,
+  };
+}
+
+async function loadLiveBundle() {
+  let symbolsQuery = supabase
+    .from("v_talaria_symbols")
+    .select("*")
+    .eq("active", true);
+
+  const [
+    sweepsRes,
+    healthRes,
+    calibrationRes,
+    calibrationBoardRes,
+    outcomeBySideRes,
+    renkoRes,
+    vsEqualRes,
+    vsEqualAlignedRes,
+    portfolioRes,
+    symbolsRes,
+    paperPositionsRes,
+    paperEquityRes,
+    vsEqualSymbolRes,
+  ] = await Promise.all([
+    supabase.from("v_talaria_latest_signals").select("*"),
+    supabase.from("v_talaria_signal_health").select("*"),
+    supabase.from("v_eod_calibration_bias_latest").select("*"),
+    supabase.from("v_calibration_confidence_board").select("*"),
+    supabase.from("v_signal_outcome_by_side").select("*").eq("qualified", true),
+    supabase
+      .from("v_talaria_renko")
+      .select("*")
+      .order("session_date", { ascending: false })
+      .order("brick_index", { ascending: false })
+      .limit(400),
+    supabase.from("v_paper_vs_optimized_daily").select("*"),
+    supabase.from("v_paper_vs_equalwt_aligned").select("*"),
+    supabase.from("v_talaria_portfolio_stats").select("").maybeSingle(),
+    symbolsQuery,
+    supabase.from("v_paper_positions").select("*").limit(200),
+    supabase.from("v_paper_equity").select("*"),
+    supabase.from("v_paper_vs_optimized_symbol").select("*"),
+  ]);
+
+  return {
+    sweeps: safeData(sweepsRes),
+    signalHealth: safeData(healthRes),
+    calibration: safeData(calibrationRes),
+    calibrationBoard: safeData(calibrationBoardRes),
+    outcomeBySide: safeData(outcomeBySideRes),
+    renkoBricks: safeData(renkoRes),
+    vsEqual: safeData(vsEqualRes),
+    vsEqualAligned: safeData(vsEqualAlignedRes),
+    portfolioStats: safeSingle(portfolioRes),
+    symbols: safeData(symbolsRes),
+    paperPositions: safeData(paperPositionsRes),
+    paperEquity: safeData(paperEquityRes),
+    vsEqualSymbol: safeData(vsEqualSymbolRes),
+    health: null,
+    refreshed_at: new Date().toISOString(),
+  };
+}
+
 export async function GET() {
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Do NOT call Clerk unless role is unknown (checkRole → clerkClient.getUser
-  // is ~1s and was firing for every member on every dashboard load).
-  const { data: localUser } = await supabase
-    .from("users")
-    .select("id, role")
-    .eq("clerk_user_id", userId)
-    .maybeSingle();
-
-  let isAdmin = roleFromLocalUser(localUser, "admin");
-  if (isAdmin == null) {
-    try {
-      isAdmin = await checkRole("admin");
-    } catch {
-      isAdmin = false;
-    }
-  }
-
-  let planSlug = null;
-  let planUuid = null;
-  if (localUser?.id) {
-    const { data: subscription } = await supabase
-      .from("subscriptions")
-      .select(
-        `plan_id,
-         plans(id, title, description, price_cents, currency, interval,
-               helio_paylink_id, slug)`
-      )
-      .eq("user_id", localUser.id)
-      .in("status", ["pending", "active", "grace"])
-      .order("created_at", { ascending: false })
-      .limit(1)
+  // Auth context is cached per Clerk user — avoids re-querying users +
+  // subscriptions on every dashboard poll.
+  const ctx = await cached(`dashctx:${userId}`, 60_000, async () => {
+    // Do NOT call Clerk unless role is unknown (checkRole → clerkClient.getUser
+    // is ~1s and was firing for every member on every dashboard load).
+    const { data: localUser } = await supabase
+      .from("users")
+      .select("id, role")
+      .eq("clerk_user_id", userId)
       .maybeSingle();
-    planSlug = subscription?.plans?.slug ?? null;
-    planUuid = subscription?.plans?.id ?? subscription?.plan_id ?? null;
-  }
+
+    let isAdmin = roleFromLocalUser(localUser, "admin");
+    if (isAdmin == null) {
+      try {
+        isAdmin = await checkRole("admin");
+      } catch {
+        isAdmin = false;
+      }
+    }
+
+    let planSlug = null;
+    let planUuid = null;
+    if (localUser?.id) {
+      const { data: subscription } = await supabase
+        .from("subscriptions")
+        .select(
+          `plan_id,
+           plans(id, title, description, price_cents, currency, interval,
+                 helio_paylink_id, slug)`
+        )
+        .eq("user_id", localUser.id)
+        .in("status", ["pending", "active", "grace"])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      planSlug = subscription?.plans?.slug ?? null;
+      planUuid = subscription?.plans?.id ?? subscription?.plan_id ?? null;
+    }
+
+    return { isAdmin: !!isAdmin, planSlug, planUuid };
+  });
+
+  const isAdmin = ctx.isAdmin;
+  const planSlug = ctx.planSlug;
+  const planUuid = ctx.planUuid;
 
   if (!isAdmin && !planSlug) {
     return NextResponse.json({
-      sweeps: [],
-      signalHealth: [],
-      calibration: [],
-      calibrationBoard: [],
-      outcomeBySide: [],
-      vsEqual: [],
-      vsEqualAligned: [],
-      vsEqualSymbol: [],
-      portfolioStats: null,
-      renkoBricks: [],
-      kelly: [],
-      symbols: [],
-      paperPositions: [],
-      paperEquity: [],
+      ...emptyBundle(),
       planSlug: null,
       isPro: false,
       isAdmin: false,
@@ -115,69 +226,14 @@ export async function GET() {
   }
 
   const isPro = isAdmin || planSlug === "precision_pro";
+  // One in-process cache for the heavy bundle. 60s is fine — the DB snapshot
+  // itself is refreshed every 2 min by pg_cron.
   const cacheKey = `dash:${isAdmin ? "admin" : planSlug || "none"}:${isPro ? "pro" : "std"}`;
 
-  // One in-process cache for the heavy parallel fan-out (PostgREST is 0.5–2s
-  // per view even when warm — dashboard used to take 8–10s).
-  const bundle = await cached(cacheKey, 20_000, async () => {
-    let symbolsQuery = supabase
-      .from("v_talaria_symbols")
-      .select("*")
-      .eq("active", true);
-    if (!isAdmin && planUuid) {
-      symbolsQuery = symbolsQuery.filter("plan_ids", "cs", `{${planUuid}}`);
-    }
-
-    const [
-      sweepsRes,
-      healthRes,
-      calibrationRes,
-      calibrationBoardRes,
-      outcomeBySideRes,
-      renkoRes,
-      vsEqualRes,
-      vsEqualAlignedRes,
-      portfolioRes,
-      symbolsRes,
-      paperPositionsRes,
-      paperEquityRes,
-      vsEqualSymbolRes,
-    ] = await Promise.all([
-      supabase.from("v_talaria_latest_signals").select("*"),
-      supabase.from("v_talaria_signal_health").select("*"),
-      supabase.from("v_eod_calibration_bias_latest").select("*"),
-      supabase.from("v_calibration_confidence_board").select("*"),
-      supabase.from("v_signal_outcome_by_side").select("*").eq("qualified", true),
-      supabase
-        .from("v_talaria_renko")
-        .select("*")
-        .order("session_date", { ascending: false })
-        .order("brick_index", { ascending: false })
-        .limit(400),
-      supabase.from("v_paper_vs_optimized_daily").select("*"),
-      supabase.from("v_paper_vs_equalwt_aligned").select("*"),
-      supabase.from("v_talaria_portfolio_stats").select("").maybeSingle(),
-      symbolsQuery,
-      isPro ? supabase.from("v_paper_positions").select("*") : { data: [] },
-      isPro ? supabase.from("v_paper_equity").select("*") : { data: [] },
-      isPro ? supabase.from("v_paper_vs_optimized_symbol").select("*") : { data: [] },
-    ]);
-
-    return {
-      sweeps: safeData(sweepsRes),
-      signalHealth: safeData(healthRes),
-      calibration: safeData(calibrationRes),
-      calibrationBoard: safeData(calibrationBoardRes),
-      outcomeBySide: safeData(outcomeBySideRes),
-      renkoBricks: safeData(renkoRes),
-      vsEqual: safeData(vsEqualRes),
-      vsEqualAligned: safeData(vsEqualAlignedRes),
-      portfolioStats: safeSingle(portfolioRes),
-      symbols: safeData(symbolsRes),
-      paperPositions: safeData(paperPositionsRes),
-      paperEquity: safeData(paperEquityRes),
-      vsEqualSymbol: safeData(vsEqualSymbolRes),
-    };
+  const bundle = await cached(cacheKey, 60_000, async () => {
+    const fromCache = await loadCachedBundle();
+    if (fromCache) return fromCache;
+    return loadLiveBundle();
   });
 
   const {

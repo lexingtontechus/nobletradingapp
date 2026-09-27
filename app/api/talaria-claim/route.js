@@ -19,8 +19,9 @@
 //   4. Mint a 32-byte hex token (node:crypto) and store ONLY its SHA-256 hash
 //      in talaria_claims — the raw token is returned exactly once and can
 //      never be recovered from the DB.
-//   5. Single-active-token policy: revoke the user's other non-revoked
-//      claims, then insert the new one with a 30-day expiry.
+//   5. Single-active-token policy via mint_talaria_claim() RPC (advisory-locked
+//      revoke-then-insert). Concurrent mints used to race the partial unique
+//      index and 500.
 //
 // The Talaria client presents this token to the talaria-check Edge Function,
 // which re-checks the LIVE subscriptions row on every call — the token only
@@ -57,7 +58,7 @@ export async function POST() {
     .maybeSingle()
 
   let user = localUser
-  if (!user) {
+  if (!user?.id) {
     const clerk = await clerkClient()
     const u = await clerk.users.getUser(userId)
     const email = u.emailAddresses[0]?.emailAddress
@@ -102,7 +103,8 @@ export async function POST() {
     .limit(1)
     .maybeSingle()
 
-  if (!subscription) {
+  const planId = subscription?.plans?.id ?? subscription?.plan_id ?? null
+  if (!subscription || !planId) {
     return NextResponse.json(
       { error: "no_active_subscription" },
       { status: 403 }
@@ -116,35 +118,26 @@ export async function POST() {
     Date.now() + CLAIM_TTL_DAYS * 24 * 60 * 60 * 1000
   ).toISOString()
 
-  // 5. Single-active-token policy: revoke every other live claim for this
-  //    user (best-effort; the partial unique index in migration 0006 is the
-  //    DB-level backstop).
-  await supabase
-    .from("talaria_claims")
-    .update({ revoked_at: new Date().toISOString() })
-    .eq("user_id", user.id)
-    .is("revoked_at", null)
-    .neq("token_hash", tokenHash)
+  // 5. Atomic revoke-then-insert (advisory lock inside the RPC).
+  const { data: minted, error: rpcErr } = await supabase.rpc("mint_talaria_claim", {
+    p_user_id: user.id,
+    p_plan_id: planId,
+    p_token_hash: tokenHash,
+    p_expires_at: expiresAt,
+  })
 
-  // 6. Insert the new claim (30-day expiry)
-  const { error: insertErr } = await supabase
-    .from("talaria_claims")
-    .insert({
-      token_hash: tokenHash,
-      user_id: user.id,
-      plan_id: subscription.plan_id,
-      expires_at: expiresAt
-    })
-
-  if (insertErr) {
-    return NextResponse.json({ error: insertErr.message }, { status: 500 })
+  if (rpcErr || !minted?.ok) {
+    return NextResponse.json(
+      { error: rpcErr?.message || minted?.error || "mint_failed" },
+      { status: 500 }
+    )
   }
 
-  // 7. Return the raw token — the ONLY time it is ever transmitted back.
+  // 6. Return the raw token — the ONLY time it is ever transmitted back.
   return NextResponse.json({
     token,
     expires_at: expiresAt,
-    plan_title: subscription.plans.title,
-    plan_slug: subscription.plans.slug
+    plan_title: minted.plan_title ?? subscription.plans?.title ?? null,
+    plan_slug: minted.plan_slug ?? subscription.plans?.slug ?? null,
   })
 }

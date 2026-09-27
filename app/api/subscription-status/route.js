@@ -14,20 +14,17 @@
 //       events: [{ event_type, received_at }]
 //     }
 //
-// Why a dedicated endpoint instead of client-side Supabase reads?
-//   1. Single round-trip (vs. 3 separate client queries).
-//   2. The service role key stays server-side; the browser never sees it.
-//   3. We can shape the payload for the UI (e.g. only last 10 payments).
-// 4. Future: add Supabase Realtime subscription on the client to push
-//    updates instead of polling this endpoint. The dashboard now uses
-//    createBrowserClient + supabase.channel('realtime:signals.<plan_slug>')
-//    for live broadcast events, with the plan_slug available on
-//    subscription.plans.slug in this response.
+// Perf notes:
+//   * Per-user in-process cache 30s (portal polls; avoids re-querying).
+//   * Clerk getUser only when the local users row is missing (first visit).
+//   * Subscription + payments run in parallel; events piggyback when we have
+//     a subscription id.
 // =============================================================================
 
 import { NextResponse } from "next/server"
 import { auth, clerkClient } from "@clerk/nextjs/server"
 import { createClient } from "@supabase/supabase-js"
+import { cached } from "@/utils/api-cache"
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -35,12 +32,7 @@ const supabase = createClient(
   { auth: { persistSession: false } }
 )
 
-export async function GET() {
-  const { userId } = await auth()
-  if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
-
+async function loadSubscriptionState(userId) {
   // 1. Resolve local user
   const { data: localUser } = await supabase
     .from("users")
@@ -53,38 +45,35 @@ export async function GET() {
     const clerk = await clerkClient()
     const u = await clerk.users.getUser(userId)
     const email = u.emailAddresses[0]?.emailAddress
-    if (email) {
-      await supabase.from("users").upsert(
-        {
-          clerk_user_id: userId,
-          email,
-          role:
-            u.publicMetadata?.role === "admin" ||
-            u.privateMetadata?.role === "admin"
-              ? "admin"
-              : "member"
-        },
-        { onConflict: "clerk_user_id" }
-      )
-      const { data: nu } = await supabase
-        .from("users")
-        .select("id, email, discord_id, discord_username, role")
-        .eq("clerk_user_id", userId)
-        .maybeSingle()
-      return NextResponse.json({
-        user: nu,
-        subscription: null,
-        payments: [],
-        events: []
-      })
+    if (!email) {
+      return { error: "No email on Clerk user", status: 400 }
     }
-    return NextResponse.json(
-      { error: "No email on Clerk user" },
-      { status: 400 }
+    await supabase.from("users").upsert(
+      {
+        clerk_user_id: userId,
+        email,
+        role:
+          u.publicMetadata?.role === "admin" ||
+          u.privateMetadata?.role === "admin"
+            ? "admin"
+            : "member"
+      },
+      { onConflict: "clerk_user_id" }
     )
+    const { data: nu } = await supabase
+      .from("users")
+      .select("id, email, discord_id, discord_username, role")
+      .eq("clerk_user_id", userId)
+      .maybeSingle()
+    return {
+      user: nu,
+      subscription: null,
+      payments: [],
+      events: []
+    }
   }
 
-  // 2–3. Subscription + payments in parallel (were sequential ~2 RTTs)
+  // 2–3. Subscription + payments in parallel
   const [subRes, payRes] = await Promise.all([
     supabase
       .from("subscriptions")
@@ -110,29 +99,54 @@ export async function GET() {
       .eq("user_id", localUser.id)
       .order("paid_at", { ascending: false })
       .limit(10),
-  ]);
-  const subscription = subRes?.data ?? null;
-  const payments = payRes?.data ?? [];
+  ])
+  const subscription = subRes?.data ?? null
+  const payments = payRes?.data ?? []
 
   // 4. Recent events (last 5) — needs subscription.id
-  let events = [];
-  if (subscription) {
+  let events = []
+  if (subscription?.id) {
     const { data: ev } = await supabase
       .from("subscription_events")
       .select("event_type, amount_cents, currency, received_at")
       .eq("subscription_id", subscription.id)
       .order("received_at", { ascending: false })
-      .limit(5);
-    events = ev ?? [];
+      .limit(5)
+    events = ev ?? []
+  }
+
+  return {
+    user: localUser,
+    subscription,
+    payments,
+    events
+  }
+}
+
+export async function GET() {
+  const { userId } = await auth()
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  const payload = await cached(`sub:${userId}`, 30_000, () =>
+    loadSubscriptionState(userId)
+  )
+
+  if (payload?.error) {
+    return NextResponse.json(
+      { error: payload.error },
+      { status: payload.status || 500 }
+    )
   }
 
   return NextResponse.json(
     {
-      user: localUser,
-      subscription,
-      payments,
-      events,
+      user: payload.user,
+      subscription: payload.subscription,
+      payments: payload.payments,
+      events: payload.events,
     },
     { headers: { "Cache-Control": "private, max-age=15" } }
-  );
+  )
 }
