@@ -66,6 +66,42 @@ function fmtSignalAge(epochMs, now) {
   return `${Math.floor(diffMin / 60)}h ${diffMin % 60}m ago`;
 }
 
+// RANK board (20260928_RANK_BOARD_BROADCAST_DISCORD): rank is an opportunity
+// score (freshness + setup type + recent TP + cell), NOT win probability.
+function rankOf(s) {
+  const v = s?.rank ?? s?.kairos_rank_score;
+  if (v == null || Number.isNaN(Number(v))) return null;
+  return Number(v);
+}
+
+function stateOf(s) {
+  return s?.state || s?.kairos_event_window || null;
+}
+
+function RankChip({ rank }) {
+  if (rank == null) return <span className="opacity-40">—</span>;
+  const tone =
+    rank >= 0.75 ? "badge-primary" : rank >= 0.55 ? "badge-secondary" : "badge-ghost";
+  return (
+    <span className={`badge badge-sm ${tone} font-mono`} title="RANK = opportunity score (not win%)">
+      {rank.toFixed(2)}
+    </span>
+  );
+}
+
+function StateBadge({ state }) {
+  if (!state) return <span className="opacity-40">—</span>;
+  const up = String(state).toUpperCase();
+  const map = {
+    FRESH: "badge-success",
+    WARM: "badge-warning",
+    STALE: "badge-error",
+    DEEP: "badge-ghost",
+    PRE: "badge-info",
+  };
+  return <span className={`badge badge-sm ${map[up] || "badge-ghost"}`}>{up}</span>;
+}
+
 function FloatingSignalsWidget({ signals }) {
   const [open, setOpen] = useState(false);
   const [copiedKey, setCopiedKey] = useState(null);
@@ -122,8 +158,8 @@ function FloatingSignalsWidget({ signals }) {
             </div>
           </div>
           <p className="text-[11px] opacity-60 px-3 pt-2">
-            <span className="font-mono">k</span> = Kelly fraction — suggested risk as a share of capital,
-            not investment advice. Signals stay listed for up to 1h after firing.
+            <span className="font-mono">RANK</span> = opportunity score (freshness + setup), not win%.
+            Sort = newest first; prioritize capital by RANK, size with Kelly.
           </p>
           <div className="overflow-y-auto flex-1 divide-y divide-base-content/10 mt-1">
             {rows.length === 0 && (
@@ -142,9 +178,21 @@ function FloatingSignalsWidget({ signals }) {
                   <div className="flex items-center gap-2 flex-wrap mb-1">
                     <span className="font-mono font-semibold">{s.symbol}</span>
                     <span className={`badge badge-xs ${isSell ? "badge-error" : "badge-success"}`}>{dir}</span>
+                    <RankChip rank={rankOf(s)} />
+                    <StateBadge state={stateOf(s)} />
                     {kelly != null && <span className="opacity-60">k{Number(kelly).toFixed(2)}</span>}
                     <span className="opacity-40 ml-auto">{fmtSignalAge(s._epoch, now)}</span>
                   </div>
+                  {(s.p_win != null || s.ev_r != null || s.ev != null) && (
+                    <div className="flex items-center gap-2 flex-wrap mb-1 text-[11px] opacity-70">
+                      {s.p_win != null && <span>p_win {fmtKellyPct(s.p_win)}</span>}
+                      {(s.ev_r != null || s.ev != null) && (
+                        <span>
+                          EV {Number(s.ev_r ?? s.ev).toFixed(2)}R
+                        </span>
+                      )}
+                    </div>
+                  )}
                   <div className="flex items-center gap-1 flex-wrap">
                     {[
                       // Same color convention as the Renko chart's price levels
@@ -998,6 +1046,81 @@ function signalCall(r) {
   return { label: `CAUTION (${isSell ? "sell" : "buy"} lean)`, toneClass: "text-warning" };
 }
 
+// Signal ranking board — prioritize capital by RANK (not highest p_win).
+function SignalRankingBoard({ rows }) {
+  const ranked = (rows || [])
+    .map((r) => ({ ...r, _rank: rankOf(r), _state: stateOf(r) }))
+    .filter((r) => r.symbol)
+    .sort((a, b) => {
+      const ra = a._rank ?? -1;
+      const rb = b._rank ?? -1;
+      if (ra !== rb) return rb - ra;
+      return (b._epoch || 0) - (a._epoch || 0);
+    })
+    .slice(0, 12);
+
+  return (
+    <div className="card bg-base-100 shadow border border-base-300 mb-6">
+      <div className="card-body">
+        <h3 className="card-title text-lg">Signal ranking board</h3>
+        <p className="text-xs opacity-60 mb-3">
+          <strong>RANK</strong> is an opportunity score (event-time freshness, setup type,
+          recent TP, cell hit-rate) — not win probability. Prioritize capital by RANK;
+          size with Kelly/EV. Highest p_win is not always the best opportunity.
+        </p>
+        {ranked.length === 0 ? (
+          <p className="text-xs opacity-50">No ranked signals yet — waiting for Kairos stamps.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="table table-sm">
+              <thead>
+                <tr>
+                  <th>Signal</th>
+                  <th className="text-right">P_WIN</th>
+                  <th className="text-right">RANK</th>
+                  <th className="text-right">EV</th>
+                  <th>STATE</th>
+                  <th>Transition</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ranked.map((r) => {
+                  const isSell = String(r.signal || r.direction || "").toLowerCase() === "sell";
+                  return (
+                    <tr key={`${r.symbol}-${r.ts || r._epoch || r.sweep_timestamp || ""}`}>
+                      <td>
+                        <span className="font-mono font-semibold">{r.symbol}</span>{" "}
+                        <span className={`badge badge-xs ${isSell ? "badge-error" : "badge-success"}`}>
+                          {isSell ? "SELL" : "BUY"}
+                        </span>
+                      </td>
+                      <td className="text-right font-mono">
+                        {r.p_win != null ? fmtKellyPct(r.p_win) : "—"}
+                      </td>
+                      <td className="text-right">
+                        <RankChip rank={r._rank} />
+                      </td>
+                      <td className="text-right font-mono">
+                        {r.ev_r != null || r.ev != null
+                          ? `${Number(r.ev_r ?? r.ev).toFixed(2)}R`
+                          : "—"}
+                      </td>
+                      <td>
+                        <StateBadge state={r._state} />
+                      </td>
+                      <td className="text-xs opacity-70">{r.transition || r.kairos_transition || "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function KellyTable({ sweeps, kelly, symbolList }) {
   // Prefer dedicated v_talaria_kelly_by_symbol rows (stable contract);
   // fall back to merged sweeps if the view is empty/missing.
@@ -1036,6 +1159,7 @@ function KellyTable({ sweeps, kelly, symbolList }) {
               <tr>
                 <th>Symbol</th>
                 <th>Signal</th>
+                <th className="text-right">RANK</th>
                 <th className="text-right">Kelly</th>
                 <th>Regime</th>
                 <th className="text-right">Aggression</th>
@@ -1051,7 +1175,7 @@ function KellyTable({ sweeps, kelly, symbolList }) {
               {allGroups.map((cls) => (
                 [
                   <tr key={"header-" + cls} className="bg-base-200/50">
-                    <td colSpan={11} className="text-xs font-semibold py-1">
+                    <td colSpan={12} className="text-xs font-semibold py-1">
                       {groupLabels[cls] || cls}
                     </td>
                   </tr>,
@@ -1063,6 +1187,9 @@ function KellyTable({ sweeps, kelly, symbolList }) {
                         <tr key={r.symbol}>
                           <td className="font-mono">{r.symbol}</td>
                           <td className={`font-semibold ${call.toneClass}`}>{call.label}</td>
+                          <td className="text-right">
+                            <RankChip rank={rankOf(r)} />
+                          </td>
                           <td className="text-right font-mono">
                             {r.effective_kelly != null
                               ? "k" + Number(r.effective_kelly).toFixed(3)
@@ -2658,6 +2785,9 @@ export default function DashboardPage() {
         {/* Analysis tab content */}
         {activeTab === "analysis" && (
           <Fragment>
+            {/* RANK board — capital prioritization (Kairos) */}
+            <SignalRankingBoard rows={mergedSweeps} />
+
             {/* Kelly by symbol (grouped by asset class, sorted) */}
             <KellyTable sweeps={mergedSweeps} kelly={kellyRows} symbolList={resolvedSymbolList} />
 
