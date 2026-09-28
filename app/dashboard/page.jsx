@@ -506,12 +506,39 @@ function generateBricks(sweepRow, count = 10) {
 
 // --- Market tab content ---
 
+// Relative brick_size match (same 0.1% tolerance as backend renko_retention)
+// so float round-trips never split one grid across two buckets.
+function brickSizeMatches(a, b) {
+  const x = Number(a);
+  const y = Number(b);
+  if (!isFinite(x) || !isFinite(y) || x <= 0 || y <= 0) return false;
+  const tol = Math.max(Math.abs(y) * 1e-3, 1e-9);
+  return Math.abs(x - y) <= tol;
+}
+
+// Keep only bricks from the sweep's live grid. Stale brick_size grids and
+// orphan high brick_index rows sort first by brick_index DESC and would
+// otherwise plot on a different price plane than ENTRY/SL/TP.
+function pickLiveGridBricks(renkoBricks, symbol, sweepRow) {
+  const symbolBricks = (renkoBricks || []).filter((b) => b.symbol === symbol);
+  if (!sweepRow || !(Number(sweepRow.brick_size) > 0)) {
+    return [...symbolBricks].sort(
+      (a, b) => Number(b.brick_index ?? 0) - Number(a.brick_index ?? 0)
+    );
+  }
+  const live = symbolBricks.filter((b) =>
+    brickSizeMatches(b.brick_size, sweepRow.brick_size)
+  );
+  return live.sort((a, b) => Number(b.brick_index ?? 0) - Number(a.brick_index ?? 0));
+}
+
 function RenkoSection({ sweeps, symbolList, selectedSym, onSelect, renkoBricks }) {
   const activeSym = selectedSym || symbolList[0] || "";
   const sweepRow = sweeps.find((s) => s.symbol === activeSym);
-  // Use real renko bricks from v_talaria_renko when available, fall back to
-  // generateBricks for the symbol if no brick data has arrived yet.
-  const symbolBricks = (renkoBricks || []).filter((b) => b.symbol === activeSym);
+  // Use real renko bricks from v_talaria_renko on the SAME brick_size grid as
+  // the sweep. Fall back to generateBricks when the live grid has no rows yet
+  // (better a mock series on the entry plane than a stale grid's prices).
+  const symbolBricks = pickLiveGridBricks(renkoBricks, activeSym, sweepRow);
   const bricks = symbolBricks.length > 0
     ? symbolBricks.slice(0, 10).reverse().map((b, i) => ({
         index: i,
@@ -524,6 +551,10 @@ function RenkoSection({ sweeps, symbolList, selectedSym, onSelect, renkoBricks }
         direction: Number(b.close_price) > Number(b.open_price) ? 1 : -1,
       }))
     : generateBricks(sweepRow, 10);
+  // Latest close on the live grid = market proxy for "current price".
+  const marketProxy = symbolBricks.length > 0
+    ? Number(symbolBricks[0].close_price)
+    : null;
 
   const levels = [];
   // Trade direction, normalized from either REST (`signal`) or realtime
@@ -632,6 +663,14 @@ function RenkoSection({ sweeps, symbolList, selectedSym, onSelect, renkoBricks }
           Switch symbols to re-analyze.
         </p>
         <p><strong>Hover each brick for full price.</strong></p>
+        {marketProxy != null && sweepRow?.entry_price > 0 && (
+          <p className="text-xs opacity-70 mb-2 font-mono">
+            Market (last brick): {fmtBrickPriceUsd(marketProxy)}
+            {" · "}Entry: {fmtBrickPriceUsd(sweepRow.entry_price)}
+            {" · "}Δ {(((marketProxy - sweepRow.entry_price) / sweepRow.entry_price) * 100).toFixed(3)}%
+            {" · "}grid bs={fmtUsd(sweepRow.brick_size)}
+          </p>
+        )}
         {/* Symbol picker buttons */}
         <div className="flex flex-wrap gap-1 mb-3">
           {symbolList.map((s) => (
@@ -810,9 +849,10 @@ function RenkoSection({ sweeps, symbolList, selectedSym, onSelect, renkoBricks }
 
 function MarkovSection({ sweeps, selectedSym, renkoBricks }) {
   const sweepRow = sweeps.find((s) => s.symbol === selectedSym);
-  // Derive brick pattern from real renko brick data
+  // Derive brick pattern from real renko brick data (live grid only —
+  // same filter as RenkoSection so pattern and chart agree).
   const activeSym = selectedSym || "";
-  const symbolBricks = (renkoBricks || []).filter((b) => b.symbol === activeSym);
+  const symbolBricks = pickLiveGridBricks(renkoBricks, activeSym, sweepRow);
 
   // Build pattern from last 10 bricks, deduplicating consecutive same-direction
   const rawDirs = symbolBricks.length > 0
