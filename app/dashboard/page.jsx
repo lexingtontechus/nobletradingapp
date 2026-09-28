@@ -68,8 +68,9 @@ function fmtSignalAge(epochMs, now) {
 
 // RANK board (20260928_RANK_BOARD_BROADCAST_DISCORD): rank is an opportunity
 // score (freshness + setup type + recent TP + cell), NOT win probability.
+// Sources: realtime broadcast `rank`, REST/cache `kairos_rank_score` (183).
 function rankOf(s) {
-  const v = s?.rank ?? s?.kairos_rank_score;
+  const v = s?.rank ?? s?.kairos_rank_score ?? null;
   if (v == null || Number.isNaN(Number(v))) return null;
   return Number(v);
 }
@@ -272,6 +273,19 @@ function fmtUsd(v) {
   const n = Number(v);
   if (Math.abs(n) < 1000) return n.toFixed(2);
   return n.toLocaleString("en-US", { maximumFractionDigits: 1 });
+}
+
+// Brick-size display: FX grids are ~1e-4 and must not collapse to "$0.00"
+// under fmtUsd's 2dp path. Trim trailing zeros after enough precision.
+function fmtBrickSize(v) {
+  if (v == null || isNaN(Number(v))) return "—";
+  const n = Number(v);
+  if (n === 0) return "0";
+  const abs = Math.abs(n);
+  if (abs >= 100) return n.toFixed(2).replace(/\.?0+$/, "");
+  if (abs >= 1) return n.toFixed(4).replace(/\.?0+$/, "");
+  if (abs >= 0.01) return n.toFixed(6).replace(/\.?0+$/, "");
+  return n.toPrecision(4).replace(/\.?0+$/, "");
 }
 
 // Full-precision price formatter for renko chart — no rounding.
@@ -656,7 +670,7 @@ function RenkoSection({ sweeps, symbolList, selectedSym, onSelect, renkoBricks }
         </div>
         <p className="text-xs opacity-60 mb-3">
           Last {bricks.length} renko bricks of the selected symbol (each brick
-          = one fixed price move of {sweepRow ? fmtUsd(sweepRow.brick_size) : "n/a"}).
+          = one fixed price move of {sweepRow ? fmtBrickSize(sweepRow.brick_size) : "n/a"}).
           ENTRY / upper / lower reference lines come from that symbol's latest
           sweep — upper/lower are labeled by chart position, not by SL/TP, since
           which one sits on top flips with trade direction (see badge above).
@@ -668,7 +682,7 @@ function RenkoSection({ sweeps, symbolList, selectedSym, onSelect, renkoBricks }
             Market (last brick): {fmtBrickPriceUsd(marketProxy)}
             {" · "}Entry: {fmtBrickPriceUsd(sweepRow.entry_price)}
             {" · "}Δ {(((marketProxy - sweepRow.entry_price) / sweepRow.entry_price) * 100).toFixed(3)}%
-            {" · "}grid bs={fmtUsd(sweepRow.brick_size)}
+            {" · "}grid bs={fmtBrickSize(sweepRow.brick_size)}
           </p>
         )}
         {/* Symbol picker buttons */}
@@ -1115,7 +1129,7 @@ function SignalRankingBoard({ rows }) {
             <table className="table table-sm">
               <thead>
                 <tr>
-                  <th>Signal</th>
+                  <th>Symbol</th>
                   <th className="text-right">P_WIN</th>
                   <th className="text-right">RANK</th>
                   <th className="text-right">EV</th>
@@ -1199,7 +1213,6 @@ function KellyTable({ sweeps, kelly, symbolList }) {
               <tr>
                 <th>Symbol</th>
                 <th>Signal</th>
-                <th className="text-right">RANK</th>
                 <th className="text-right">Kelly</th>
                 <th>Regime</th>
                 <th className="text-right">Aggression</th>
@@ -1215,7 +1228,7 @@ function KellyTable({ sweeps, kelly, symbolList }) {
               {allGroups.map((cls) => (
                 [
                   <tr key={"header-" + cls} className="bg-base-200/50">
-                    <td colSpan={12} className="text-xs font-semibold py-1">
+                    <td colSpan={11} className="text-xs font-semibold py-1">
                       {groupLabels[cls] || cls}
                     </td>
                   </tr>,
@@ -1227,9 +1240,6 @@ function KellyTable({ sweeps, kelly, symbolList }) {
                         <tr key={r.symbol}>
                           <td className="font-mono">{r.symbol}</td>
                           <td className={`font-semibold ${call.toneClass}`}>{call.label}</td>
-                          <td className="text-right">
-                            <RankChip rank={rankOf(r)} />
-                          </td>
                           <td className="text-right font-mono">
                             {r.effective_kelly != null
                               ? "k" + Number(r.effective_kelly).toFixed(3)
