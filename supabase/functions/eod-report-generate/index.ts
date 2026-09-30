@@ -120,9 +120,17 @@ function symbolPrompt(rec: any, reportDate: string) {
   const lines = [`Symbol: ${rec.symbol}`, `Date: ${reportDate}`];
   if (rec.new_signal) {
     const s = rec.new_signal;
+    // `ev` is the model's expected value in PRICE UNITS (not dollars). Do not
+    // present it as $ — the LLM previously wrote "realized $0.02 fell short of
+    // predicted EV $0.00", which is both unit-wrong and direction-wrong.
+    const ev = s.ev == null ? null : Number(s.ev);
+    const evNote =
+      ev == null
+        ? "model expected value: not published"
+        : `model expected value ${ev.toFixed(2)} (price units, not dollars)`;
     lines.push(
       `New signal issued today: direction ${s.signal}, regime ${s.regime || "unknown"}, ` +
-        `predicted win probability ${fmtPct(s.p_win)}, expected value $${Number(s.ev ?? 0).toFixed(2)}, ` +
+        `predicted win probability ${fmtPct(s.p_win)}, ${evNote}, ` +
         `effective Kelly ${Number(s.effective_kelly ?? 0).toFixed(3)}.`
     );
   } else {
@@ -132,7 +140,7 @@ function symbolPrompt(rec: any, reportDate: string) {
     const r = rec.resolved;
     lines.push(
       `${r.n} signal(s) resolved today: ${r.n_tp} hit target, ${r.n_sl} hit stop, ${r.n_expired} expired. ` +
-        `Net realized P&L: $${r.total_pnl_dollars.toFixed(2)}.`
+        `Net realized P&L: $${r.total_pnl_dollars.toFixed(2)} (dollars).`
     );
   } else {
     lines.push("No signals resolved today.");
@@ -147,7 +155,14 @@ function symbolPrompt(rec: any, reportDate: string) {
   if (rec.current_price != null) {
     lines.push(`Current price: ${rec.current_price}` + (rec.new_signal ? ` (entry was ${rec.new_signal.entry_price})` : "."));
   }
-  lines.push("Write a 2-4 sentence factual summary of how this symbol's signal(s) performed today relative to what was predicted.");
+  lines.push(
+    "Write a 2-4 sentence factual summary of how this symbol's signal(s) performed today relative to what was predicted.",
+    "STRICT RULES:",
+    "- Never say realized P&L 'fell short of', 'missed', or 'underperformed' predicted expected value when realized P&L is greater than predicted EV.",
+    "- Do not compare dollar P&L to model EV unless both are clearly the same unit. Prefer describing outcomes (target/stop/expired) and net dollar P&L on their own.",
+    "- If model EV is zero, missing, or near zero, omit any shortfall/beat comparison entirely.",
+    "- If realized net is positive, describe it as positive. If negative, describe it as negative. No spin."
+  );
   return lines.join("\n");
 }
 
@@ -167,6 +182,7 @@ function digestPrompt(stats: any, reportDate: string) {
     `7-day rollup: ${stats.weekly_n} resolved signal-days sampled, mean predicted win rate ${fmtPct(stats.weekly_avg_predicted)} ` +
       `vs mean realized win rate ${fmtPct(stats.weekly_avg_realized)}.`,
     "Write a 3-5 sentence factual executive summary of today's signal accuracy referencing these numbers.",
+    "STRICT RULES: never say dollar P&L 'fell short of' model expected value when realized is higher; do not mix price-unit EV with dollar P&L; if a predicted EV is 0 or missing, omit shortfall/beat language.",
   ].join("\n");
 }
 

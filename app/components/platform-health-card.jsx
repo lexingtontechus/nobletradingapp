@@ -111,15 +111,18 @@ export default function PlatformHealthCard() {
           </div>
         ) : (
           <>
-            {/* Product metrics — all users */}
+            {/* Product metrics — all users.
+                signals_7d / signals_24h are QUALIFIED signal checks from
+                v_platform_health_summary (qualified = true only), same
+                population as the hot-signals feed — NOT every sweep row. */}
             <div className="stats stats-vertical sm:stats-horizontal shadow bg-base-200 w-full">
               <div className="stat py-2">
-                <div className="stat-title text-xs">Alerts (7d)</div>
+                <div className="stat-title text-xs">Qualified alerts (7d)</div>
                 <div className="stat-value text-xl">
                   {u?.signals_7d?.value ?? "—"}
                 </div>
-                <div className="stat-desc">
-                  {u?.signals_24h ?? "—"} in the last 24h{" "}
+                <div className="stat-desc" title="Qualified signal checks only — not every scan row">
+                  qualified only · {u?.signals_24h ?? "—"} in 24h{" "}
                   {deltaLabel(u?.signals_7d)}
                 </div>
               </div>

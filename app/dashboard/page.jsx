@@ -104,13 +104,12 @@ function StateBadge({ state }) {
 }
 
 function FloatingSignalsWidget({ signals }) {
-  const [open, setOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const [copiedKey, setCopiedKey] = useState(null);
   // 0 until the first effect tick — render must never call Date.now() itself
   // (react-hooks/purity). The gap is one paint at most; effects run right
   // after mount.
   const [now, setNow] = useState(0);
-  const prevCountRef = useRef(0);
 
   // Set "now" once on mount, then every 30s so ages + TTL expiry stay
   // current even with no new signal data.
@@ -128,12 +127,6 @@ function FloatingSignalsWidget({ signals }) {
         .slice(0, 12)
     : [];
 
-  // Auto-open when a genuinely new signal arrives (row count increases).
-  useEffect(() => {
-    if (rows.length > prevCountRef.current) setOpen(true);
-    prevCountRef.current = rows.length;
-  }, [rows.length]);
-
   const copy = async (key, text) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -145,18 +138,30 @@ function FloatingSignalsWidget({ signals }) {
     }
   };
 
+  // Always-on docked panel. Collapse is optional; empty state is explicit so
+  // the surface never "disappears" when the feed is quiet.
   return (
     <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2">
-      {open && (
-        <div className="w-80 max-h-[70vh] flex flex-col bg-base-300 border border-base-content/20 rounded-md shadow-xl overflow-hidden p-2">
-          <div className="flex items-center justify-between px-3 py-2 border-b border-base-content/10">
-            <span className="font-semibold text-sm">Talaria Live Signals</span>
+      {!collapsed && (
+        <div className="w-80 max-h-[70vh] flex flex-col bg-base-100 border border-base-content/20 rounded-md shadow-xl overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-base-content/10 bg-base-200">
             <div className="flex items-center gap-2">
-              {rows.length > 0 && <span className="badge badge-primary badge-sm">{rows.length} live</span>}
-              <button className="btn btn-ghost btn-xs btn-circle" onClick={() => setOpen(false)} title="Collapse">
-                ✕
-              </button>
+              <TalariaMark size={16} />
+              <span className="font-semibold text-sm">Hot signals</span>
+              <span
+                className={`badge badge-sm ${rows.length > 0 ? "badge-primary" : "badge-ghost"}`}
+                title="Qualified signals in the last hour"
+              >
+                {rows.length} live
+              </span>
             </div>
+            <button
+              className="btn btn-ghost btn-xs btn-circle"
+              onClick={() => setCollapsed(true)}
+              title="Collapse"
+            >
+              ✕
+            </button>
           </div>
           <p className="text-[11px] opacity-60 px-3 pt-2">
             <span className="font-mono">RANK</span> = opportunity score (freshness + setup), not win%.
@@ -164,7 +169,13 @@ function FloatingSignalsWidget({ signals }) {
           </p>
           <div className="overflow-y-auto flex-1 divide-y divide-base-content/10 mt-1">
             {rows.length === 0 && (
-              <p className="text-xs opacity-50 p-3">No qualified signals in the last hour.</p>
+              <div className="p-4 text-center">
+                <p className="text-sm font-medium">No hot signals right now</p>
+                <p className="text-xs opacity-60 mt-1">
+                  Watching all plan symbols. New qualified signals appear here within
+                  the hour they fire — nothing to do until then.
+                </p>
+              </div>
             )}
             {rows.map((s) => {
               const isSell = String(s.signal || s.direction || "").toLowerCase() === "sell";
@@ -234,18 +245,20 @@ function FloatingSignalsWidget({ signals }) {
           </div>
         </div>
       )}
-      <button
-        className="btn btn-circle btn-outline hover:btn-neutral"
-        onClick={() => setOpen((v) => !v)}
-        title="Talaria Live Signals"
-      >
-        <span className="relative flex items-center justify-center">
-          <TalariaMark size={22} />
-          {rows.length > 0 && (
-            <span className="absolute -top-3 -right-3 badge badge-error badge-xs">{rows.length}</span>
-          )}
-        </span>
-      </button>
+      {collapsed && (
+        <button
+          className="btn btn-circle btn-outline hover:btn-neutral"
+          onClick={() => setCollapsed(false)}
+          title="Show hot signals"
+        >
+          <span className="relative flex items-center justify-center">
+            <TalariaMark size={22} />
+            {rows.length > 0 && (
+              <span className="absolute -top-3 -right-3 badge badge-error badge-xs">{rows.length}</span>
+            )}
+          </span>
+        </button>
+      )}
     </div>
   );
 }
@@ -649,7 +662,7 @@ function RenkoSection({ sweeps, symbolList, selectedSym, onSelect, renkoBricks }
       <div className="card-body">
         <div className="flex items-center gap-2 flex-wrap">
           <h3 className="card-title text-lg">
-            Renko bricks — last 10 (per symbol)
+            Price ladder — last 10 moves
           </h3>
           <span className="mx-2 font-semibold badge badge-primary">{selectedSym || "select a symbol"}</span>
           {sigDirection && (
@@ -669,12 +682,13 @@ function RenkoSection({ sweeps, symbolList, selectedSym, onSelect, renkoBricks }
           )}
         </div>
         <p className="text-xs opacity-60 mb-3">
-          Last {bricks.length} renko bricks of the selected symbol (each brick
-          = one fixed price move of {sweepRow ? fmtBrickSize(sweepRow.brick_size) : "n/a"}).
-          ENTRY / upper / lower reference lines come from that symbol's latest
-          sweep — upper/lower are labeled by chart position, not by SL/TP, since
-          which one sits on top flips with trade direction (see badge above).
-          Switch symbols to re-analyze.
+          Each block is one fixed price step ({sweepRow ? fmtBrickSize(sweepRow.brick_size) : "n/a"}).
+          The chart always shows the <strong>10 most recent steps</strong> on the
+          live grid so the short-term shape stays readable. The horizontal
+          lines are your trade levels from the latest signal: entry in the
+          middle, with stop and target above or below depending on buy/sell
+          (see the badge). Hover a block for full prices. Switch symbols to
+          re-analyze.
         </p>
         <p><strong>Hover each brick for full price.</strong></p>
         {marketProxy != null && sweepRow?.entry_price > 0 && (
@@ -853,8 +867,7 @@ function RenkoSection({ sweeps, symbolList, selectedSym, onSelect, renkoBricks }
         )}
 
         <p className="text-xs opacity-50 mt-2">
-          ENTRY / upper / lower reference lines from the latest sweep · window = last 10
-          bricks
+          Levels: entry / stop / target from the latest signal · always 10 steps on the live grid
         </p>
       </div>
     </div>
@@ -886,8 +899,8 @@ function MarkovSection({ sweeps, selectedSym, renkoBricks }) {
     : "—";
   const markovTone = markovP >= 0.5 ? "text-success" : "text-error";
   const markovSub = markovP
-    ? `P(down) ${(1 - markovP) * 100}% · 200 bricks`
-    : "needs ≥10 bricks";
+    ? `P(down) ${((1 - markovP) * 100).toFixed(1)}% · longer sample`
+    : "waiting for more history";
 
   return (
     <div className="card bg-base-100 shadow border border-base-300 mb-6">
@@ -896,21 +909,21 @@ function MarkovSection({ sweeps, selectedSym, renkoBricks }) {
           Markov + pattern — {selectedSym || "select a symbol"}
         </h3>
         <p className="text-xs opacity-60 mb-3">
-          Short-term shape + longer statistical odds for the SELECTED symbol.
-          Brick pattern reads the last 10 bricks; Markov P(up in 3) fits a
-          3-state chain on up to 200 brick closes.
+          Two reads on the selected symbol. The pattern is the short-term
+          shape of the last 10 price steps. The probability is a longer
+          statistical fit — how likely the next few steps lean up.
         </p>
         <div className="grid gap-4 md:grid-cols-2">
           <StatCard
-            title="Brick pattern"
+            title="Recent shape"
             value={pattern}
             sub={
-              "last 10 bricks · " +
+              "last 10 steps · " +
               (sweepRow ? fmtRegime(sweepRow.regime) : "regime n/a")
             }
           />
           <StatCard
-            title="Markov P(up in 3)"
+            title="P(up next 3 steps)"
             value={markovDisplay}
             sub={markovSub}
             tone={markovP ? (markovP > 0.5 ? "pos" : "neg") : undefined}
@@ -918,9 +931,9 @@ function MarkovSection({ sweeps, selectedSym, renkoBricks }) {
           />
         </div>
         <p className="text-xs opacity-50 mt-2">
-          Brick pattern = last 10 bricks only (short-term shape). Markov P(up
-          in 3) = 3-state Markov chain on up to 200 closes — probability the
-          next 3-brick move is UP. &gt;50% leans bullish, &lt;50% leans bearish.
+          Recent shape = direction changes in the last 10 steps (push,
+          pullback, or chop). P(up next 3 steps) uses a longer sample of
+          closes — above 50% leans bullish, below 50% leans bearish.
         </p>
       </div>
     </div>
