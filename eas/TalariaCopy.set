@@ -1,0 +1,30 @@
+; Talaria Copy defaults
+; Load from the EA inputs dialog, or copy to MQL5\Presets\TalariaCopy.set
+;
+; 1. Place this file with the EA (or load the preset)
+; 2. Keep Place orders = No and Mode = Shadow for the first session
+; 3. Allow the signal service URL in Tools → Options → Expert Advisors
+; 4. Attach Talaria Copy to any one chart
+
+EnableTrading=false
+Mode=1
+RiskPercentPerTrade=0.5
+MaxLotsPerOrder=1.0
+MaxOpenPositions=5
+SlippagePoints=20
+MoveSLToBEAfterTP1=false
+MaxSignalAgeSec=1800
+ConfirmTimeoutSec=120
+
+EndpointURL=https://pcvscowltlrxzgxjurcr.supabase.co/functions/v1/talaria-copy
+TokenFilePath=otc_token.txt
+StateFilePath=otc_state.csv
+TransportMode=1
+PollIntervalSec=600
+HandshakeIntervalSec=43200
+HttpTimeoutMs=8000
+
+MagicNumber=20260908
+SymbolMap=
+RequoteRetries=3
+RequoteDelayMs=400

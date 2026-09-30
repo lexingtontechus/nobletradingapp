@@ -1,0 +1,16 @@
+{
+  "endpoint": "https://pcvscowltlrxzgxjurcr.supabase.co/functions/v1/talaria-copy",
+  "token_file": "otc_token.txt",
+  "mode": "shadow",
+  "risk_percent": 0.5,
+  "max_lots": 1.0,
+  "max_open_positions": 5,
+  "magic": 20260908,
+  "symbol_map": {},
+  "handshake_interval_sec": 43200,
+  "ws_heartbeat_sec": 30,
+  "backup_poll_sec": 600,
+  "local_push_host": "127.0.0.1",
+  "local_push_port": 8765,
+  "use_mt5_python": true
+}

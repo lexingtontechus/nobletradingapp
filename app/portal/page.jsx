@@ -28,8 +28,10 @@ import { useEffect, useState, useCallback, useRef } from "react"
 import Link from "next/link"
 import { SubscriptionCard } from "../components/subscription-card"
 import { SubscriptionStatusBadge } from "../components/subscription-status-badge"
-import { TalariaCredentialsPanel } from "../components/talaria-credentials-panel"
-import { TalariaPluginDownloadPanel } from "../components/talaria-plugin-download-panel"
+// 2026-09-29: Talaria Signal Copy (Python bridge + local EA) replaces the
+// Hermes plugin download + standalone credentials panels on the portal.
+// Token reveal lives inside TalariaSignalCopyPanel.
+import { TalariaSignalCopyPanel } from "../components/talaria-signal-copy-panel"
 import PlanSelector from "../components/plan-selector"
 
 // -----------------------------------------------------------------------------
@@ -319,13 +321,12 @@ export default function Portal() {
           <NoSubscriptionCard onChosePlan={refresh} />
         )}
 
-        {/* Talaria credentials panel — shown only for active/grace subs.
-            Hidden behind a "Reveal" button so creds aren't visible on screen-share. */}
+        {/* Talaria Signal Copy (Python bridge / local EA) — active/grace only.
+            2026-09-29: TalariaCredentialsPanel + TalariaPluginDownloadPanel removed
+            from this page (token reveal is inside TalariaSignalCopyPanel). */}
         {sub && (sub.status === "active" || sub.status === "grace") && (
           <>
-            <TalariaCredentialsPanel />
-            {/* All Plans  — plugin download link */}
-            <TalariaPluginDownloadPanel />
+            <TalariaSignalCopyPanel />
             {/* Next steps / navigation */}
             <div className="card bg-base-100 shadow border border-base-300">
               <div className="card-body">
@@ -334,17 +335,47 @@ export default function Portal() {
                   <li className="flex items-start gap-3">
                     <span className="text-primary">1.</span>
                     <span>
-                      <strong>Open the Hermes desktop app.</strong> Tell Hermes Agent to install the Talaria
-                      plugin. Paste your Talaria claim token into the plugin's Connect tab.
+                      <strong>Install Talaria Signal Copy</strong> on the same computer
+                      as MetaTrader 5 (Windows or macOS). Download the Python bridge
+                      files into a folder such as{" "}
+                      <code className="font-mono text-xs">C:\Talaria\</code> or{" "}
+                      <code className="font-mono text-xs">~/Talaria/</code>, then run
+                      it.
                     </span>
                   </li>
-
-
-
+                  <li className="flex items-start gap-3">
+                    <span className="text-primary">2.</span>
+                    <span>
+                      <strong>Save your claim token.</strong> Click{" "}
+                      <em>Reveal claim token</em> → <em>Download .txt</em> and put{" "}
+                      <code className="font-mono text-xs">otc_token.txt</code> in that
+                      same Talaria folder.
+                    </span>
+                  </li>
                   <li className="flex items-start gap-3">
                     <span className="text-primary">3.</span>
                     <span>
-                      Return anytime to manage billing, cancel, or view payment history.
+                      <strong>Talaria realtime signals</strong> stream to the bridge
+                      automatically while MetaTrader&nbsp;5 is open — you do not need
+                      to refresh a page or check for new alerts by hand.
+                    </span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <span className="text-primary">4.</span>
+                    <span>
+                      <strong>Optional — chart confirm buttons.</strong> If you want
+                      BUY / SELL buttons on the MT5 chart when a signal appears, copy{" "}
+                      <code className="font-mono text-xs">TalariaCopy.mq5</code> into{" "}
+                      <code className="font-mono text-xs">MQL5\Experts\</code>, attach
+                      it to a chart, and click BUY or SELL to place that trade. Skip
+                      this if the bridge should place orders by itself.
+                    </span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <span className="text-primary">5.</span>
+                    <span>
+                      Return anytime to manage billing or mint a new token (this
+                      revokes the old one).
                     </span>
                   </li>
                 </ul>

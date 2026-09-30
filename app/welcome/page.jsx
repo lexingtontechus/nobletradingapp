@@ -16,8 +16,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
 import Link from "next/link";
-import { TalariaCredentialsPanel } from "@/app/components/talaria-credentials-panel";
-import { TalariaPluginDownloadPanel } from "@/app/components/talaria-plugin-download-panel";
+import { TalariaSignalCopyPanel } from "@/app/components/talaria-signal-copy-panel";
 import { SubscriptionStatusBadge } from "@/app/components/subscription-status-badge";
 
 // Service-role client (server-only). Bypasses RLS.
@@ -181,22 +180,8 @@ export default async function WelcomePage() {
           </div>
         </div>
 
-        {/* Credentials panel — auto-revealed on welcome page since payment just
-            confirmed. The panel itself still requires a click to mint the token
-            (security: the token is only generated on demand). */}
-        <div>
-          <h3 className="text-lg font-semibold mb-3">Talaria client credentials</h3>
-          <p className="text-sm opacity-60 mb-3">
-            Reveal your claim token to connect the Talaria plugin inside the
-            Hermes desktop app. This token proves your identity; the live
-            subscription row grants access.
-          </p>
-          <TalariaCredentialsPanel autoReveal={false} />
-
-        </div>
-
-        {/* Precision Pro plugin download */}
-        <TalariaPluginDownloadPanel />
+        {/* Talaria Signal Copy — Python bridge / local EA (claim token included) */}
+        <TalariaSignalCopyPanel />
 
         {/* Next steps / navigation */}
         <div className="card bg-base-100 shadow border border-base-300">
@@ -206,26 +191,29 @@ export default async function WelcomePage() {
               <li className="flex items-start gap-3">
                 <span className="text-primary">1.</span>
                 <span>
-                  <strong>Open the Hermes desktop app.</strong> The Talaria
-                  plugin is built in — no separate download needed for Signal
-                  Scout. Paste your claim token into the plugin's Connect tab.
+                  <strong>Install Talaria Signal Copy</strong> on the same computer as
+                  MetaTrader 5 (Windows or macOS). Put the Python files in a folder
+                  such as <code className="font-mono text-xs">C:\Talaria\</code> or{" "}
+                  <code className="font-mono text-xs">~/Talaria/</code> and run the
+                  program.
                 </span>
               </li>
-
-                <li className="flex items-start gap-3">
-                  <span className="text-primary">2.</span>
-                  <span>
-                    <strong>Download the Talaria plugin</strong> for Precision
-                    Pro advanced analytics (paper portfolio, Sharpe/Sortino
-                    tear-sheet). The link is above.
-                  </span>
-                </li>
-
+              <li className="flex items-start gap-3">
+                <span className="text-primary">2.</span>
+                <span>
+                  <strong>Reveal your claim token</strong> and save{" "}
+                  <code className="font-mono text-xs">otc_token.txt</code> in that
+                  same folder.
+                </span>
+              </li>
               <li className="flex items-start gap-3">
                 <span className="text-primary">3.</span>
                 <span>
-                  <strong>Bookmark your portal.</strong> Return anytime to
-                  manage billing, cancel, or view payment history.
+                  <strong>Talaria realtime signals</strong> reach you automatically
+                  while MetaTrader&nbsp;5 is open. Optional: add{" "}
+                  <code className="font-mono text-xs">TalariaCopy.mq5</code> in{" "}
+                  <code className="font-mono text-xs">MQL5\Experts\</code> if you want
+                  BUY / SELL buttons on the chart to confirm each trade.
                 </span>
               </li>
             </ul>

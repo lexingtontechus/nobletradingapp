@@ -105,22 +105,32 @@ Next entitled signal from Lightning Studio → `v_talaria_latest_signals` is upd
 - **Production writes:** `noble-trader-fastapi-backend` Lightning Studio jobs write `nt_sweep_result` with all signal fields. The table is already queried by `v_talaria_latest_signals` (migration 0009 in this repo + migration 110/130 in the fastapi backend).
 - **No new tables needed.** The existing schema has everything: `nt_sweep_result` (signals), `nt_symbol` + `v_talaria_symbols` (symbol roster + plan gating), `v_talaria_latest_signals` (latest qualified signal per symbol).
 
-### 5.2 Signal query for the EA (REST over HTTPS)
-The EA polls `v_talaria_latest_signals` via Supabase REST. The query is filtered to the user's plan's symbols using `v_talaria_symbols` with `.contains('plan_ids', [planUuid])` — the same pattern the web dashboard uses in `app/api/dashboard-data/route.js`.
+### 5.2 Signal query for the EA (gateway HTTPS — no Supabase material in the EA)
 
-The `talaria-check` edge function already returns `plan_slug` and `plan_uuid` in its response, so the EA knows which plan it belongs to and can filter signals accordingly.
+**Design lock:** the customer EA must NOT embed Supabase URL, anon key, or service key. A third-party file holds only the gateway URL + the claim token. All Supabase access stays inside one Edge Function.
 
-### 5.3 How EAs receive signals — polling first, Realtime push as upgrade
+- **`talaria-copy` Edge Function** (`supabase/functions/talaria-copy/index.ts`) is the only EA-facing surface.
+- The EA `POST`s `{ token, action: "handshake" | "poll" }` to that single HTTPS URL.
+- The function hashes the token → `talaria_claims`, re-reads the LIVE `subscriptions` row, computes `entitled` (`active` | `grace`), and:
+  - **handshake** → `plan_slug`, `plan_uuid`, `sub_status`, plan symbol roster (`v_talaria_symbols.plan_ids` containment).
+  - **poll** → only `qualified = true` rows from `v_talaria_latest_signals` for those symbols (same column contract as §5.4).
+- Desktop plugin keeps using `talaria-check`; the EA uses `talaria-copy` (shared claim model, EA-shaped payload).
 
-Supabase Edge Functions are stateless: they **cannot host persistent WebSocket connections**, so v1.0's WSS design is replaced:
+Why not EA → REST + anon key: key rotation or project move would force an EA redistribution, and the published anon key would be enough to scrape signals. The gateway keeps both internal.
 
-- **v1 — REST polling (alpha):** the EA calls `GET /rest/v1/v_talaria_latest_signals` (via the Supabase anon REST API) on its 1-second `OnTimer` loop. The view is already indexed (fastapi backend migration 130 adds composite indexes on `nt_sweep_result(symbol, sweep_timestamp DESC)` + `nt_regime_log(symbol, detected_at DESC)`). The EA filters to its plan's symbols client-side using the symbol roster from `v_talaria_symbols` (plan-gated via `plan_ids` containment). Worst-case delivery latency ≈ 1–5 s (poll interval); steady-state cost ≈ 2 requests/minute/EA. MQL5's native WinInet/WinHTTP makes HTTPS GET simple — no WebSocket stack needed for alpha.
+### 5.3 How EAs receive signals — WebSocket push (Option A, 2026-09-29)
 
-- **Phase 4+ — Supabase Realtime broadcast (preferred):** if latency complaints or >200 concurrent EAs, the EA subscribes to the **same Supabase Realtime broadcast channel the web dashboard already uses**: `signals.${planSlug}` (which resolves to `realtime:signals.${planSlug}` on the wire). The web dashboard (`app/dashboard/page.jsx:2148–2250`) already subscribes via `supabase.channel(`signals.${planSlug}`)` with `.on("broadcast", { event: "signal" })`. The fastapi backend broadcasts via `realtime_publisher.py` on the literal topic `realtime:signals.<plan_slug>`. MQL5 can speak WebSocket-over-TLS (RFC 6455); the anon key is passed as a `Bearer` JWT or `apikey` query param. The broadcast payload is the same `v_talaria_latest_signals` row shape. No new Edge Function or gateway is needed.
+**Decision:** MQL5 can open WebSockets (raw `Socket*` + RFC 6455, or an async WinHTTP DLL such as `asyncwinhttpwebsockets.dll`). The EA joins the **same Supabase Realtime Phoenix channel** as the desktop plugin:
 
-**Key insight — reuse the existing Realtime pattern:** The EA should NOT use a separate `ea-poll` function or a custom WebSocket gateway. It subscribes to the identical `signals.<plan_slug>` channel the web dashboard uses. The `TransportMode` input (`rest_poll` | `realtime`) lets customers upgrade without an EA redeploy.
+- URL: `wss://<host>/realtime/v1/websocket?apikey=<anon_publishable>&vsn=1.0.0`
+- Topic: `realtime:signals.<plan_slug>` (from handshake — never client-derived)
+- Frames: object JSON `{topic,event,payload,ref}` (same as `plugin.js`)
 
-Latency budget: Lightning job emits signal → writes `nt_sweep_result` (≤100 ms) → EA poll pickup ≤2–5 s (REST) or ≤1–2 s (Realtime) → order sent ≤300 ms. **Target: trade opened within ~5 s (REST), ~2 s (Realtime).**
+`talaria-copy` **handshake** returns `realtime_url`, `realtime_apikey`, `realtime_topic`, `realtime_vsn`. Claim token remains for identity/entitlement TTL; the anon key is the same public publishable key the plugin embeds.
+
+**Fallback:** REST `action=poll` every `PollIntervalSec` (default 10 min) if WS is down or the WSS DLL is missing. Light sweeps still write ~every 15 min; push delivers when the sweep publishes.
+
+**TLS note:** `Socket*` is raw TCP — production `wss://` requires the WinHTTP/WinINet WebSocket DLL (or equivalent). Pure MQL5 WS is possible only against `ws://` or with a TLS wrapper.
 
 ### 5.4 Canonical signal contract (the EA consumer)
 The EA reads `v_talaria_latest_signals` which returns per-symbol rows:
@@ -158,9 +168,9 @@ The existing `/portal` and `/welcome` pages already use Tailwind CSS 4 + daisyUI
 ## 7. S6 — The EA (MQL5), Detailed Specification
 
 ### 7.1 Files & identity
-- **Source:** `OneTradeCopy.mq5` — single file, MQL5 stdlib only, no external dependencies.
-- **Identity:** `MagicNumber` input (default `20260908`) isolates EA-managed positions. Order comment carries a truncated dedup key (`OTC:xxxxxxx`) derived from `symbol` + `sweep_timestamp` + the EA's state file, mapping local ticket numbers to the sweep that opened them.
-- **Token identity:** Reads the Talaria claim token from `token.txt` (placed in the MQL5 data folder by the bundle). Presents it to `talaria-check` over HTTPS.
+- **Source:** `eas/OneTradeCopy.mq5` — single file, MQL5 stdlib only, no external dependencies. Defaults: `eas/OneTradeCopy.set`.
+- **Identity:** `MagicNumber` input (default `20260908`) isolates EA-managed positions. Order comment carries a truncated dedup key (`OTC:…`) derived from `symbol` + `sweep_timestamp`, mapping local tickets to the sweep that opened them. Processed UIDs persist in `otc_state.csv`.
+- **Token identity:** reads the Talaria claim token from `MQL5\Files\otc_token.txt` (one line). Presents it only to the `talaria-copy` gateway over HTTPS. **No Supabase URL or keys in the EA or token file.**
 
 ### 7.2 Inputs (ALL risk configuration lives here — nothing on the platform)
 
@@ -172,20 +182,25 @@ The existing `/portal` and `/welcome` pages already use Tailwind CSS 4 + daisyUI
 | `MaxLotsPerOrder` | 1.0 | Hard clamp per order |
 | `MaxOpenPositions` | 5 | EA refuses new signals beyond this |
 | `SlippagePoints` | 20 | Max deviation for market orders |
-| `HubURL` | preset | Supabase REST URL (HTTPS enforced) |
-| `AnonKey` | preset | Supabase anon key (safe for client — RLS enforced) |
-| `TokenFilePath` | preset | Where `token.txt` lives in the MQL5 data folder |
+| `EndpointURL` | preset | **Only** network surface: `…/functions/v1/talaria-copy` (HTTPS enforced) |
+| `TokenFilePath` | `otc_token.txt` | Claim token file in `MQL5\Files` |
+| `StateFilePath` | `otc_state.csv` | Processed signal UIDs (idempotency) |
 | `MoveSLToBEAfterTP1` | false | Optional breakeven behavior after first partial |
-| `PollIntervalSec` | 2 | How often to poll `v_talaria_latest_signals` (REST mode) |
-| `TransportMode` | `rest_poll` | `rest_poll` (Supabase REST) or `realtime` (Supabase Realtime broadcast on `signals.<plan_slug>`) |
+| `MaxSignalAgeSec` | 300 | Skip stale signals on pickup |
+| `PollIntervalSec` | 2 | Gateway poll interval |
+| `TransportMode` | `rest_poll` | Reserved for a later realtime upgrade; v1 is gateway REST only |
+| `MagicNumber` | `20260908` | Isolates EA-managed positions |
+| `SymbolMap` | `""` | Optional `XAUUSD=XAUUSDm,…` broker name overrides |
+| `HttpTimeoutMs` | 8000 | `WebRequest` timeout |
+| `RequoteRetries` / `RequoteDelayMs` | 3 / 400 | Market-order retry budget |
 
 ### 7.3 Lifecycle
 
-1. **OnInit** — read `token.txt`; if missing/empty: chart comment + journal with the exact fix ("re-download bundle from dashboard"). Otherwise call `talaria-check` (POST with token). Response yields `plan_slug`, `plan_uuid`, `sub_status`. If `ok: false`, show error + stop. Build the **symbol map** (fuzzy-match base names against terminal symbols, e.g., `XAUUSD` → `XAUUSDm`). Start the `OnTimer` loop.
+1. **OnInit** — read `otc_token.txt`; if missing/empty: chart comment + journal with the exact fix ("reveal credentials on the portal, save token to MQL5\Files"). Otherwise `POST action=handshake` to `talaria-copy`. Response yields `entitled`, `plan_slug`, `plan_uuid`, `sub_status`, symbol roster. Build the **symbol map** (override map + fuzzy match vs terminal symbols, e.g. `XAUUSD` → `XAUUSDm`). Start `OnTimer`.
 
-2. **OnTimer (every 1s)** — depends on `TransportMode` input:
-   - `rest_poll`: GET `v_talaria_latest_signals` via Supabase REST, filtered to the user's plan symbols (using the symbol roster from `talaria-check`'s `plan_uuid`).
-   - `realtime`: WebSocket on `realtime:signals.<plan_slug>` (same channel the web dashboard uses); REST as fallback on disconnect.
+2. **OnTimer (every `PollIntervalSec`)** — `POST action=poll`. Gateway returns only qualified, plan-scoped signals. Re-handshake every 5 minutes (or on failure) so a lapsed subscription stops delivery. Skip when `entitled` is false.
+
+3. **Signal processing** — skip if UID already in `otc_state.csv`; map symbol; compute lots from EA inputs; `Shadow` journals only; `Live` sends `OrderSend` with SL/TP (fallback open-then-modify on invalid stops).
 
 3. **Signal processing** — per signal: check `qualified = true`; map symbol; compute lot size from EA inputs; send `MqlTradeRequest`/`OrderSend` with SL + TP; log the outcome.
 
@@ -228,10 +243,12 @@ All required schema **already exists**:
 | `plans` | Migration 0001 + 0002 (this repo) | Plan metadata (title, slug, price, helio_paylink_id) |
 | `v_talaria_latest_signals` | Migration 0009 (this repo) + 110/130 (fastapi backend) | Latest qualified signal per symbol (anon-readable) |
 | `v_talaria_symbols` | Migration 0009 (this repo) | Plan-gated symbol roster with `plan_ids` + `tradingview_symbol` |
-| `talaria-check` edge function | `supabase/functions/talaria-check/index.ts` | Validates claim token + re-checks live subscription |
+| `talaria-check` edge function | `supabase/functions/talaria-check/index.ts` | Validates claim token + re-checks live subscription (desktop plugin) |
+| `talaria-copy` edge function | `supabase/functions/talaria-copy/index.ts` | **EA gateway:** handshake + plan-scoped qualified signals; `entitled` gate |
 | `/api/talaria-claim` | `app/api/talaria-claim/route.js` | Mints claim token (32-byte hex, SHA-256 hashed at rest) |
+| `eas/OneTradeCopy.mq5` | `eas/OneTradeCopy.mq5` | MT5 EA (claims via gateway only; local risk) |
 
-**No new tables. No new edge functions.** The existing `talaria_claims` + `talaria-check` pattern is reused for EA identity + entitlement.
+**No new tables.** One new Edge Function (`talaria-copy`) so the EA never holds Supabase keys.
 
 For the EA's trade log (ack records), the EA can persist state locally in the MQL5 data folder (no server-side table needed for v1). If server-side trade logging is desired later, it can be added as a simple `ea_acks` table — but this is a Phase 2 concern, not required for launch.
 
@@ -239,12 +256,13 @@ For the EA's trade log (ack records), the EA can persist state locally in the MQ
 
 ## 9. Security Model
 
-- **No broker passwords, ever.** The EA presents only the Talaria claim token to `talaria-check`.
+- **No broker passwords, ever.** The EA presents only the Talaria claim token to the `talaria-copy` gateway.
+- **No service-role Supabase material in the customer EA.** Option A (2026-09-29) ships the **anon/publishable** key + Realtime URL for push (plugin parity). No project service key, no raw claim hash storage in the EA. The gateway (`talaria-copy`) remains the only service-role client.
 - **Claim tokens are hashed at rest** (SHA-256 in `talaria_claims`). The raw token is returned exactly once at mint time and can never be recovered from the DB. The `TalariaCredentialsPanel` already implements "Reveal credentials" UX — the token is only fetched on demand.
 - **Single-active-token policy:** minting a new token revokes the user's other live claims (both the JS-side revoke in `/api/talaria-claim` and the DB-level partial unique index `talaria_claims_one_active_per_user_idx`).
-- **Entitlement enforced on every call.** `talaria-check` re-reads the LIVE `subscriptions` row — a valid token does NOT bypass a lapsed subscription.
-- **All transport HTTPS.** The EA refuses non-TLS `HubURL`.
-- **Signal query uses the anon key** — RLS is enforced by the plan_id filter on `v_talaria_symbols` + the `plan_ids` containment check. No service-role key needed in the EA.
+- **Entitlement enforced on every call.** `talaria-copy` (and `talaria-check`) re-read the LIVE `subscriptions` row — a valid token does NOT bypass a lapsed subscription. The EA refuses to trade unless `entitled == true`.
+- **All transport HTTPS.** The EA refuses a non-`https://` `EndpointURL`.
+- **Signals are plan-scoped server-side.** The gateway filters `v_talaria_latest_signals` to the claim plan's symbols and `qualified = true`. The EA cannot widen the roster.
 
 ---
 
