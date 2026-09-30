@@ -8,8 +8,19 @@ traders subscribe to two tiers of real-time trade signals — **Signal Scout**
 and **Precision Pro** — paid in crypto via
 [Helio / MoonPay Commerce](https://www.moonpay.hel.io/), with automated renewal
 reminders, Discord role sync (Helio's managed bot), and a **Talaria claim
-token** that authorizes the subscriber's own Hermes agent / trading client
-against Talaria by Noble Trading App for the live signal stream.
+token** that authorizes the subscriber’s trading client for the live signal stream.
+
+### Product highlights (2026-09)
+
+| | |
+|---|---|
+| **Kairos** | Opportunity **RANK** (not just `p_win`) + STATE (FRESH/WARM/STALE/DEEP) + event-time transitions — prioritize capital |
+| **Talaria Signal Copy** | Push copy to **MT5** (Windows &amp; macOS). Python bridge + Realtime WebSocket; 10‑min REST poll as backup only |
+| **Quality honesty** | Coverage, expiry, edge vs no-skill, calibration — not marketing win-rates |
+| **Dashboard** | Live Renko (live `brick_size` grid), ENTRY/SL/TP, ranking board, Kelly, platform health |
+
+**Signal delivery:** Supabase Realtime `realtime:signals.<plan_slug>` (WebSocket push).  
+**Execution:** `bridge/talaria_bridge.py` (local, no VPS) → MetaTrader5 API or EA on `127.0.0.1`.
 
 ---
 
@@ -269,37 +280,49 @@ payload — that's how we tie Helio events to the local subscription row
 
 ## Talaria client credentials
 
-The **Talaria** desktop client (a Hermes agent plugin) connects to the Noble
-Trading signal stream without shipping any Clerk secret or client SDK. The
-portal's **Talaria credentials panel** (`app/components/talaria-credentials-panel.jsx`)
-mints a claim token and presents the connection bundle:
+The **Talaria Signal Copy** flow (portal / welcome) mints a **claim token**
+(`POST /api/talaria-claim`, SHA-256 at rest in `talaria_claims`) and the
+subscriber runs `bridge/talaria_bridge.py` locally against MetaTrader 5.
 
-```bash
-TALARIA_CLAIM_TOKEN=<64-hex, minted once>
-TALARIA_PLAN=<plan_slug>
-TALARIA_EXPIRES_AT=<ISO timestamp>
+| Path | Role |
+|---|---|
+| `app/components/talaria-signal-copy-panel.jsx` | Download MQ5/EA + reveal/download `otc_token.txt` |
+| `bridge/talaria_bridge.py` | Supabase Realtime WS (primary) + REST poll backup (10 min) |
+| `supabase/functions/talaria-copy` | Handshake (entitlement TTL) + poll fallback |
+| `eas/TalariaCopy.mq5` | Optional local EA (`TransportMode` local push) |
+
+Portal and welcome use **TalariaSignalCopyPanel** (Hermes plugin download panel is retired from those pages).
+
+### Kairos (research → product surface)
+
+Kairos ranks opportunities inside a regime cell (`kairos_rank_score`) and stamps
+STATE / transitions on the signal stream. The dashboard **Signal ranking board**
+and Discord embeds show RANK vs `p_win` — highest win-rate is not always the
+best capital allocation. Research-only until a separate promote bar; never a
+silent gate.
+
+### Claim-token flow
+
+```text
+Portal / welcome
+  POST /api/talaria-claim  →  raw token (once) + SHA-256 in talaria_claims
+  Download otc_token.txt
+        │
+        ▼
+bridge/talaria_bridge.py   (same PC / Mac as MT5 — no VPS)
+  handshake (entitlement TTL ~12h)
+  Supabase Realtime WS  (primary)
+  REST poll every 10 min (backup)
+        │
+        ├─ Windows: MetaTrader5 Python order_send
+        └─ both: LocalPushHub 127.0.0.1:8765 → TalariaCopy.mq5
 ```
 
-### Flow
-
-```
-Portal (Clerk web)                          Supabase                       Talaria client (Hermes)
-──────────────────                          ────────                       ────────────────────────
-POST /api/talaria-claim ──▶ mint 32-byte hex token
-                             store ONLY sha256(token) in talaria_claims
-                             revoke user's other live claims
-◀── raw token (shown once) ──
-                            ──▶ user pastes SUPABASE_URL + publishable key + token
-                                 into the plugin's Connect tab
-                                                          ──▶ POST /functions/v1/talaria-check { token }
-                                                              hash → lookup talaria_claims (join plans)
-                                                              re-check LIVE subscriptions row
-                                                              ◀── { plan_slug, sub_status, period_end, ... }
-```
+Legacy Hermes plugin credentials remain in `talaria-credentials-panel.jsx` for
+compatibility but are no longer shown on portal/welcome.
 
 - **The token only proves identity; the live `subscriptions` row decides
-  access.** A lapsed subscription gets `sub_status: expired` and no signal
-  data even with a valid token.
+  access.** A lapsed subscription gets no signal data even with a valid token.
 - Raw tokens are **never stored** — only `sha256(token)` — so a DB leak
   cannot be used to impersonate a subscriber.
 - **Single-active-token policy** (migration 0006): minting a new token

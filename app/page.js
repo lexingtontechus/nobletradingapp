@@ -3,7 +3,7 @@ import Link from "next/link";
 export const metadata = {
   title: "Noble Trading — Talaria Live Signal Dashboard",
   description:
-    "Talaria is the Noble Trading signal dashboard that lives inside the Hermes desktop app: live Renko charts, entry/stop/target on every signal, market-regime labels, and a 30-day signal health scoreboard. Unlocks with Signal Scout ($199/mo) or Precision Pro ($599/mo).",
+    "Talaria live signals with Kairos opportunity ranking, Renko charts, entry/stop/target, market-regime labels, and signal health. Signal Scout ($199/mo) or Precision Pro ($599/mo). Talaria Signal Copy to MT5 on Windows and macOS.",
 };
 
 export default function Home() {
@@ -125,6 +125,51 @@ export default function Home() {
                 and profit factor — plus signal science per symbol: Markov
                 probability, brick-pattern analysis, and a sizing what-if. A paper portfolio with Sharpe, Sortino, Calmar,
                 and max drawdown.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Kairos — opportunity ranking (not just win-rate) */}
+      <section className="mx-auto max-w-5xl px-4 pb-16">
+        <div className="text-center mb-10">
+          <h2 className="text-3xl font-bold mb-2">Kairos — rank what matters now</h2>
+          <p className="opacity-70 max-w-2xl mx-auto">
+            Highest win-probability is not always the best trade. Kairos scores
+            every setup on <strong>opportunity</strong> — freshness after a regime
+            shift, setup type, recent hit-rate, and cell strength — so you can
+            prioritize capital, not chase a single percentage.
+          </p>
+        </div>
+        <div className="grid gap-6 md:grid-cols-3">
+          <div className="card bg-base-100">
+            <div className="card-body">
+              <h3 className="card-title">RANK &amp; STATE</h3>
+              <p>
+                A 0–1 opportunity score with FRESH / WARM / STALE / DEEP
+                state badges on every signal. See which ideas deserve size
+                first — and which are past their clock.
+              </p>
+            </div>
+          </div>
+          <div className="card bg-base-100">
+            <div className="card-body">
+              <h3 className="card-title">Event-time transitions</h3>
+              <p>
+                The research stack tracks regime flips in <em>event time</em>
+                (not wall-clock age). Post-flip setups are treated as a short
+                information window — the ranking respects that clock.
+              </p>
+            </div>
+          </div>
+          <div className="card bg-base-100">
+            <div className="card-body">
+              <h3 className="card-title">Honest quality</h3>
+              <p>
+                We surface coverage, expiry, and edge versus no-skill — not
+                marketing win-rates. Signal health, calibration bias, and
+                paper P&amp;L stay visible so you can judge the book yourself.
               </p>
             </div>
           </div>
