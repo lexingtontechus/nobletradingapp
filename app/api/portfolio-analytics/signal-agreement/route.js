@@ -84,6 +84,16 @@ export async function GET(request) {
     );
   }
 
+  // Empty cache: background warm + immediate response (Vercel 10s cap).
+  if (!hasPayload && !forceRefresh) {
+    startBackgroundWarm("agreement", planSlug, symbols);
+    return NextResponse.json({
+      error: "Portfolio analytics are warming up.",
+      warming: true,
+      hint: "This fills automatically in the background. Refresh in a minute.",
+    });
+  }
+
   try {
     const computed = await computeAndCacheAgreement(planSlug, symbols, LOOKBACK_DAYS, {
       timeoutMs: ON_DEMAND_COMPUTE_MS,
@@ -100,6 +110,22 @@ export async function GET(request) {
   }
 }
 
+function startBackgroundWarm(kind, planSlug, symbols) {
+  const run =
+    kind === "agreement"
+      ? computeAndCacheAgreement(planSlug, symbols, LOOKBACK_DAYS, { timeoutMs: 55_000 })
+      : computeAndCacheCorrelation(planSlug, symbols, { timeoutMs: 55_000 });
+  run.then((r) => {
+    console.log(`[portfolio-cache] background ${kind} warm`, {
+      ok: r?.ok,
+      planSlug,
+      error: r?.error ?? null,
+    });
+  }).catch((e) => {
+    console.warn(`[portfolio-cache] background ${kind} warm failed`, String(e));
+  });
+}
+
 function respondWithStaleOrError(cached, message) {
   if (cached?.payload) {
     return NextResponse.json({
@@ -112,10 +138,11 @@ function respondWithStaleOrError(cached, message) {
   }
   return NextResponse.json(
     {
-      error: message,
+      error: "Portfolio analytics are warming up.",
       warming: true,
-      hint: "Analytics cache is empty; the scheduled warm job will fill it shortly.",
+      detail: message,
+      hint: "This fills automatically in the background. Refresh in a minute.",
     },
-    { status: 502 }
+    { status: 200 }
   );
 }

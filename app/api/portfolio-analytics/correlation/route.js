@@ -90,6 +90,20 @@ export async function GET(request) {
     );
   }
 
+  // Empty cache (or refresh): do NOT wait on free-tier Render inside the
+  // request — Vercel Hobby kills the function at ~10s. Kick a best-effort
+  // recompute in the background and return immediately so the panel can
+  // show a friendly "warming" state. Cron /api/portfolio-analytics/warm
+  // is the reliable fill path (55s budget).
+  if (!hasPayload && !forceRefresh) {
+    startBackgroundWarm("correlation", planSlug, symbols);
+    return NextResponse.json({
+      error: "Portfolio analytics are warming up.",
+      warming: true,
+      hint: "This fills automatically in the background. Refresh in a minute.",
+    });
+  }
+
   try {
     const computed = await computeAndCacheCorrelation(planSlug, symbols, {
       timeoutMs: ON_DEMAND_COMPUTE_MS,
@@ -106,6 +120,22 @@ export async function GET(request) {
   }
 }
 
+function startBackgroundWarm(kind, planSlug, symbols) {
+  const run =
+    kind === "correlation"
+      ? computeAndCacheCorrelation(planSlug, symbols, { timeoutMs: 55_000 })
+      : computeAndCacheAgreement(planSlug, symbols, 90, { timeoutMs: 55_000 });
+  run.then((r) => {
+    console.log(`[portfolio-cache] background ${kind} warm`, {
+      ok: r?.ok,
+      planSlug,
+      error: r?.error ?? null,
+    });
+  }).catch((e) => {
+    console.warn(`[portfolio-cache] background ${kind} warm failed`, String(e));
+  });
+}
+
 function respondWithStaleOrError(cached, message) {
   if (cached?.payload) {
     return NextResponse.json({
@@ -116,13 +146,13 @@ function respondWithStaleOrError(cached, message) {
       error: message,
     });
   }
-  // Always JSON — the dashboard panel must never see an HTML/text crash page.
   return NextResponse.json(
     {
-      error: message,
+      error: "Portfolio analytics are warming up.",
       warming: true,
-      hint: "Analytics cache is empty; the scheduled warm job will fill it shortly.",
+      detail: message,
+      hint: "This fills automatically in the background. Refresh in a minute.",
     },
-    { status: 502 }
+    { status: 200 }
   );
 }
