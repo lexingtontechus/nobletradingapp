@@ -1881,6 +1881,23 @@ function PairList({ title, tone, pairs, valueFormatter, emptyLabel }) {
 // (https://github.com/lexingtontechus/nobletradingapp-backend). Cached
 // server-side (12h), so this is a read of a pre-computed result, not a live
 // on-demand call.
+// Parse analytics responses that may be JSON or a platform error page
+// (Vercel timeout body starts with "An error o..." and breaks res.json()).
+async function readJsonSafe(res) {
+  const text = await res.text().catch(() => "");
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {
+      error:
+        text && text.length < 200
+          ? text
+          : `Request failed (${res.status}). Analytics may be warming — try again shortly.`,
+      warming: res.status >= 500,
+    };
+  }
+}
+
 function SignalRiskCard({ isPro }) {
   const [overview, setOverview] = useState(null);
   const [agreement, setAgreement] = useState(null);
@@ -1895,10 +1912,13 @@ function SignalRiskCard({ isPro }) {
         fetch(`/api/portfolio-analytics/correlation${suffix}`),
         fetch(`/api/portfolio-analytics/signal-agreement${suffix}`),
       ]);
-      setOverview(await ovRes.json());
-      setAgreement(await agRes.json());
+      // Vercel timeouts / platform errors return HTML or plain text — never
+      // assume res.json() will parse. Always land on a shaped object.
+      setOverview(await readJsonSafe(ovRes));
+      setAgreement(await readJsonSafe(agRes));
     } catch (e) {
       setOverview({ error: String(e) });
+      setAgreement({ error: String(e) });
     } finally {
       setLoading(false);
       setRefreshing(false);

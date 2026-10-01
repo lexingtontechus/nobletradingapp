@@ -79,18 +79,32 @@ export async function readAnalyticsCache(view, planSlug) {
 
 const WEBAPP_BACKEND_URL =
   process.env.WEBAPP_BACKEND_URL || "https://nobletradingapp-backend.onrender.com";
+// Must match nobletradingapp-backend Settings.API_KEY (Render secret).
+// Every /webapp/* route on that service requires this X-API-Key header.
 const WEBAPP_BACKEND_API_KEY = process.env.WEBAPP_BACKEND_API_KEY;
-const BACKEND_TIMEOUT_MS = 55_000;
 
-async function callBackend(path) {
+/**
+ * Single entry point for Next.js → nobletradingapp-backend.
+ * Always sends X-API-Key; never call the backend without this helper.
+ *
+ * Default timeout is 8s: Vercel Hobby functions hard-stop at ~10s. On-demand
+ * routes must never wait on free-tier Render cold start + compute. Longer
+ * budgets are for cron warm only.
+ */
+export async function callWebappBackend(path, { timeoutMs = 8_000 } = {}) {
   if (!WEBAPP_BACKEND_API_KEY) {
-    return { ok: false, error: "WEBAPP_BACKEND_API_KEY is not configured on the server." };
+    return {
+      ok: false,
+      error:
+        "WEBAPP_BACKEND_API_KEY is not configured on the server " +
+        "(must match nobletradingapp-backend API_KEY).",
+    };
   }
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), BACKEND_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(`${WEBAPP_BACKEND_URL}${path}`, {
-      headers: { "X-API-Key": WEBAPP_BACKEND_API_KEY },
+      headers: { "X-API-Key": WEBAPP_BACKEND_API_KEY, Accept: "application/json" },
       signal: controller.signal,
     });
     clearTimeout(timeout);
@@ -112,10 +126,11 @@ async function callBackend(path) {
 }
 
 /** Recompute correlation for a symbol list and write the cache row. */
-export async function computeAndCacheCorrelation(planSlug, symbols) {
+export async function computeAndCacheCorrelation(planSlug, symbols, { timeoutMs = 8_000 } = {}) {
   const joined = [...symbols].sort().join(",");
-  const result = await callBackend(
-    `/webapp/correlation-overview?symbols=${encodeURIComponent(joined)}`
+  const result = await callWebappBackend(
+    `/webapp/correlation-overview?symbols=${encodeURIComponent(joined)}`,
+    { timeoutMs }
   );
   const computedAt = new Date().toISOString();
   const write = await upsertAnalyticsCache("v_correlation_cache", {
@@ -136,10 +151,11 @@ export async function computeAndCacheCorrelation(planSlug, symbols) {
 }
 
 /** Recompute signal-agreement for a symbol list and write the cache row. */
-export async function computeAndCacheAgreement(planSlug, symbols, lookbackDays = 90) {
+export async function computeAndCacheAgreement(planSlug, symbols, lookbackDays = 90, { timeoutMs = 8_000 } = {}) {
   const joined = [...symbols].sort().join(",");
-  const result = await callBackend(
-    `/webapp/signal-agreement?symbols=${encodeURIComponent(joined)}&lookback_days=${lookbackDays}`
+  const result = await callWebappBackend(
+    `/webapp/signal-agreement?symbols=${encodeURIComponent(joined)}&lookback_days=${lookbackDays}`,
+    { timeoutMs }
   );
   const computedAt = new Date().toISOString();
   const write = await upsertAnalyticsCache("v_signal_agreement_cache", {
@@ -189,8 +205,8 @@ export async function warmPlanAnalytics(planSlug, planUuid) {
   }
 
   const [correlation, agreement] = await Promise.all([
-    computeAndCacheCorrelation(planSlug, symbols),
-    computeAndCacheAgreement(planSlug, symbols, 90),
+    computeAndCacheCorrelation(planSlug, symbols, { timeoutMs: 55_000 }),
+    computeAndCacheAgreement(planSlug, symbols, 90, { timeoutMs: 55_000 }),
   ]);
 
   return {
