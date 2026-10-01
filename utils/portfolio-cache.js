@@ -125,6 +125,20 @@ export async function callWebappBackend(path, { timeoutMs = 8_000 } = {}) {
   }
 }
 
+/** Best-effort: annotate the `error` column on an existing cache row without
+ * touching payload/computed_at/symbols — used when a recompute fails, so a
+ * transient backend hiccup can never clobber a previously-good cached
+ * payload. No-op (0 rows affected) if no row exists yet for plan_slug. */
+async function annotateCacheError(view, planSlug, errorMessage) {
+  const { error } = await supabase
+    .from(view)
+    .update({ error: errorMessage })
+    .eq("plan_slug", planSlug);
+  if (error) {
+    console.error(`[portfolio-cache] ${view} error-annotate failed for ${planSlug}:`, error.message);
+  }
+}
+
 /** Recompute correlation for a symbol list and write the cache row. */
 export async function computeAndCacheCorrelation(planSlug, symbols, { timeoutMs = 8_000 } = {}) {
   const joined = [...symbols].sort().join(",");
@@ -132,21 +146,37 @@ export async function computeAndCacheCorrelation(planSlug, symbols, { timeoutMs 
     `/webapp/correlation-overview?symbols=${encodeURIComponent(joined)}`,
     { timeoutMs }
   );
+
+  if (!result.ok) {
+    // Backend call failed (timeout, 5xx, etc.) — do NOT overwrite a
+    // previously-good cache row with a null payload. Only annotate the
+    // error for visibility; computed_at/payload/symbols are left exactly
+    // as they were, so stale-first reads keep serving the last good result.
+    await annotateCacheError("v_correlation_cache", planSlug, result.error).catch(() => {});
+    return {
+      ok: false,
+      cached: false,
+      computed_at: null,
+      write_error: null,
+      error: result.error,
+    };
+  }
+
   const computedAt = new Date().toISOString();
   const write = await upsertAnalyticsCache("v_correlation_cache", {
     plan_slug: planSlug,
     computed_at: computedAt,
     symbols: [...symbols].sort(),
-    payload: result.ok ? result.payload : null,
-    window_days: result.ok ? result.payload?.n_bars_fitted ?? null : null,
-    error: result.ok ? null : result.error,
+    payload: result.payload,
+    window_days: result.payload?.n_bars_fitted ?? null,
+    error: null,
   });
   return {
-    ok: result.ok && write.ok,
+    ok: write.ok,
     cached: false,
     computed_at: computedAt,
     write_error: write.ok ? null : write.error,
-    ...(result.ok ? result.payload : { error: result.error }),
+    ...result.payload,
   };
 }
 
@@ -157,21 +187,34 @@ export async function computeAndCacheAgreement(planSlug, symbols, lookbackDays =
     `/webapp/signal-agreement?symbols=${encodeURIComponent(joined)}&lookback_days=${lookbackDays}`,
     { timeoutMs }
   );
+
+  if (!result.ok) {
+    // Same no-clobber policy as computeAndCacheCorrelation above.
+    await annotateCacheError("v_signal_agreement_cache", planSlug, result.error).catch(() => {});
+    return {
+      ok: false,
+      cached: false,
+      computed_at: null,
+      write_error: null,
+      error: result.error,
+    };
+  }
+
   const computedAt = new Date().toISOString();
   const write = await upsertAnalyticsCache("v_signal_agreement_cache", {
     plan_slug: planSlug,
     computed_at: computedAt,
     symbols: [...symbols].sort(),
-    payload: result.ok ? result.payload : null,
+    payload: result.payload,
     lookback_days: lookbackDays,
-    error: result.ok ? null : result.error,
+    error: null,
   });
   return {
-    ok: result.ok && write.ok,
+    ok: write.ok,
     cached: false,
     computed_at: computedAt,
     write_error: write.ok ? null : write.error,
-    ...(result.ok ? result.payload : { error: result.error }),
+    ...result.payload,
   };
 }
 

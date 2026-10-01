@@ -1113,12 +1113,24 @@ function signalCall(r) {
   return { label: `CAUTION (${isSell ? "sell" : "buy"} lean)`, toneClass: "text-warning" };
 }
 
+// EV in R-multiples, or null if the row carries no EV at all.
+function evOf(r) {
+  const v = r?.ev_r != null ? r.ev_r : r?.ev;
+  return v == null ? null : Number(v);
+}
+
 // Signal ranking board — prioritize capital by RANK (not highest p_win).
+// Positive-EV signals rank first (sorted by RANK within that group); rows
+// with EV <= 0 (or no EV at all) sort after and render greyed out — they're
+// not worth sizing even if RANK looks good.
 function SignalRankingBoard({ rows }) {
   const ranked = (rows || [])
-    .map((r) => ({ ...r, _rank: rankOf(r), _state: stateOf(r) }))
+    .map((r) => ({ ...r, _rank: rankOf(r), _state: stateOf(r), _ev: evOf(r) }))
     .filter((r) => r.symbol)
     .sort((a, b) => {
+      const aPos = a._ev != null && a._ev > 0;
+      const bPos = b._ev != null && b._ev > 0;
+      if (aPos !== bPos) return aPos ? -1 : 1;
       const ra = a._rank ?? -1;
       const rb = b._rank ?? -1;
       if (ra !== rb) return rb - ra;
@@ -1134,6 +1146,7 @@ function SignalRankingBoard({ rows }) {
           <strong>RANK</strong> is an opportunity score (event-time freshness, setup type,
           recent TP, cell hit-rate) — not win probability. Prioritize capital by RANK;
           size with Kelly/EV. Highest p_win is not always the best opportunity.
+          Ranked by positive EV first; EV &le; 0 rows are greyed out below.
         </p>
         {ranked.length === 0 ? (
           <p className="text-xs opacity-50">No ranked signals yet — waiting for Kairos stamps.</p>
@@ -1153,8 +1166,13 @@ function SignalRankingBoard({ rows }) {
               <tbody>
                 {ranked.map((r) => {
                   const isSell = String(r.signal || r.direction || "").toLowerCase() === "sell";
+                  const negativeEv = !(r._ev != null && r._ev > 0);
                   return (
-                    <tr key={`${r.symbol}-${r.ts || r._epoch || r.sweep_timestamp || ""}`}>
+                    <tr
+                      key={`${r.symbol}-${r.ts || r._epoch || r.sweep_timestamp || ""}`}
+                      className={negativeEv ? "opacity-40" : undefined}
+                      title={negativeEv ? "EV is not positive — not sized for capital allocation" : undefined}
+                    >
                       <td>
                         <span className="font-mono font-semibold">{r.symbol}</span>{" "}
                         <span className={`badge badge-xs ${isSell ? "badge-error" : "badge-success"}`}>
@@ -1168,9 +1186,7 @@ function SignalRankingBoard({ rows }) {
                         <RankChip rank={r._rank} />
                       </td>
                       <td className="text-right font-mono">
-                        {r.ev_r != null || r.ev != null
-                          ? `${Number(r.ev_r ?? r.ev).toFixed(2)}R`
-                          : "—"}
+                        {r._ev != null ? `${r._ev.toFixed(2)}R` : "—"}
                       </td>
                       <td>
                         <StateBadge state={r._state} />
@@ -1885,8 +1901,9 @@ function PairList({ title, tone, pairs, valueFormatter, emptyLabel }) {
 // (Vercel timeout body starts with "An error o..." and breaks res.json()).
 async function readJsonSafe(res) {
   const text = await res.text().catch(() => "");
+  let data;
   try {
-    return JSON.parse(text);
+    data = JSON.parse(text);
   } catch {
     return {
       error:
@@ -1896,9 +1913,58 @@ async function readJsonSafe(res) {
       warming: res.status >= 500,
     };
   }
+  return friendlyAnalyticsPayload(data);
 }
 
-function SignalRiskCard({ isPro }) {
+// Map backend jargon to trader-facing copy on the risk panel.
+function friendlyAnalyticsPayload(data) {
+  if (!data || typeof data !== "object") return data;
+  const raw = String(data.error || data.detail || "");
+  if (!raw) return data;
+  if (/shared trading sessions|shared daily closes|history accumulat/i.test(raw)) {
+    return {
+      ...data,
+      error: null,
+      warming: true,
+      history_note:
+        data.history_note ||
+        "Not enough shared price history across symbols yet. This fills in as the feed accumulates trading days.",
+    };
+  }
+  if (/WEBAPP_BACKEND_API_KEY|timed out|cold start/i.test(raw)) {
+    return {
+      ...data,
+      error: null,
+      warming: true,
+      history_note: "Analytics are warming up. Refresh in a minute.",
+    };
+  }
+  return data;
+}
+
+// Shared "you don't have access to this tab" card — used at the tab
+// dispatch level (not per-component) so a single plan/role check protects
+// every widget under that tab, rather than each widget independently
+// re-deriving (and potentially disagreeing on) its own gate.
+function PlanGateCard({ title, body }) {
+  return (
+    <div className="card bg-base-100 shadow border border-base-300 mb-6">
+      <div className="card-body">
+        <h3 className="card-title text-lg">{title}</h3>
+        <div className="alert alert-info mt-2">
+          <div>
+            <h3 className="font-bold">Precision Pro feature</h3>
+            <div className="text-xs">{body}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Note: no isPro prop/gate here — gating for this whole tab happens once,
+// at the activeTab === "portfolio" dispatch site, not per-component.
+function SignalRiskCard() {
   const [overview, setOverview] = useState(null);
   const [agreement, setAgreement] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1926,25 +1992,8 @@ function SignalRiskCard({ isPro }) {
   }, []);
 
   useEffect(() => {
-    if (isPro) load(false);
-    else setLoading(false);
-  }, [isPro, load]);
-
-  if (!isPro) {
-    return (
-      <div className="card bg-base-100 shadow border border-base-300 mb-6">
-        <div className="card-body">
-          <h3 className="card-title text-lg">Signal risk overview</h3>
-          <div className="alert alert-info mt-2">
-            <div>
-              <h3 className="font-bold">Precision Pro feature</h3>
-              <div className="text-xs">Upgrade to see regime alignment, Kelly-weighted concentration, and concurrent-signal agreement across your plan&apos;s symbols.</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+    load(false);
+  }, [load]);
 
   const kellyScore = overview?.kelly_correlation_score;
   const kellyTone = kellyScore == null ? undefined : kellyScore > 1.1 ? "neg" : kellyScore < 0.9 ? "pos" : undefined;
@@ -2467,6 +2516,26 @@ export default function DashboardPage() {
   const { isSignedIn, isLoaded: clerkLoaded } = useUser();
   const [statusChecked, setStatusChecked] = useState(false);
 
+  // Single source of truth for role-gating: resolved once here and passed
+  // down as a prop, instead of each tab/component re-deriving its own
+  // admin-ness (e.g. inferring it from whether an API payload happens to
+  // include an `admin` key). Mirrors header.jsx's /api/me pattern — role
+  // lives in Clerk PRIVATE metadata, invisible to the browser SDK, so it
+  // has to come from the server. This is a UX gate only; the real
+  // boundary is server-side (/api/platform-health omits the admin block
+  // for non-admins regardless of what the client renders).
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled) setIsAdmin(d?.role === "admin");
+      })
+      .catch(() => {});
+    return () => { cancelled = true };
+  }, []);
+
   // Dashboard view data (fetched from /api/dashboard-data)
   const [sweeps, setSweeps] = useState([]);
   const [symbols, setSymbols] = useState([]);
@@ -2906,14 +2975,21 @@ export default function DashboardPage() {
             {isPro && portfolioStats && <PortfolioStatsCard stats={portfolioStats} />}
           </Fragment>
         )}
-        {activeTab === "portfolio" && <SignalRiskCard isPro={isPro} />}
+        {activeTab === "portfolio" && (
+          isPro
+            ? <SignalRiskCard />
+            : <PlanGateCard
+                title="Signal risk overview"
+                body="Upgrade to see regime alignment, Kelly-weighted concentration, and concurrent-signal agreement across your plan's symbols."
+              />
+        )}
         {activeTab === "health" && (
           <Fragment>
             <p className="text-sm opacity-70 mb-4">
               Ops quality for the live signal platform — coverage, expiry, and
               edge against each trade&apos;s own odds. Not a marketing win rate.
             </p>
-            <PlatformHealthCard />
+            <PlatformHealthCard isAdmin={isAdmin} />
           </Fragment>
         )}
         {activeTab === "eod" && <EodReportView />}

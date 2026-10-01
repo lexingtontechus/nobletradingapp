@@ -4,6 +4,14 @@
 // Admins also get ops tiles (sweep coverage, settlement, rank stamps).
 // Never a raw "win rate" claim — quality is vs each trade's own odds.
 //
+// Role gating: the real boundary is server-side — /api/platform-health
+// computes isAdmin itself and omits the `admin` payload key entirely for
+// non-admins, so there is no sensitive data in the response to leak. The
+// `isAdmin` prop (resolved once in DashboardPage via /api/me, same as
+// header.jsx) is a second, independent check purely so the ops section
+// never renders from a stray/cached payload that happens to carry an
+// `admin` key — belt-and-suspenders, not the actual access control.
+//
 // API: GET /api/platform-health
 
 "use client";
@@ -42,7 +50,7 @@ function ago(iso) {
   return `${Math.round(h / 24)}d ago`;
 }
 
-export default function PlatformHealthCard() {
+export default function PlatformHealthCard({ isAdmin = false }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -184,8 +192,10 @@ export default function PlatformHealthCard() {
               </ul>
             ) : null}
 
-            {/* Ops health — admin only */}
-            {a ? (
+            {/* Ops health — admin only. Gated on both the client-resolved
+                isAdmin prop AND the presence of the admin payload block —
+                either one being false hides the section. */}
+            {isAdmin && a ? (
               <div className="mt-4">
                 <h4 className="text-sm font-semibold uppercase opacity-70 mb-2">
                   Ops health (admin)
