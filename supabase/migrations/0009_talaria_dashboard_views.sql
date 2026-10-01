@@ -118,6 +118,31 @@ COMMENT ON VIEW public.v_talaria_latest_signals IS
 -- nt_renko_bricks has: brick_id, symbol, direction (up|down), brick_size,
 --   open_price, close_price, high, low, label, brick_index, ts, session_date.
 -- Query orders by session_date DESC, brick_index DESC per the 111-prune migration.
+--
+-- ⚠ CROSS-REPO RETENTION CONTRACT (2026-10-01, worklog
+-- noble-trader-fastapi-backend/worklog/20261001_NT_RENKO_BRICKS_TIMEOUT_AND_GROWTH.md
+-- §13, "Track A"): this view's "last 10 bricks per symbol" window (consumed
+-- by app/dashboard/page.jsx RenkoSection AND the Talaria desktop/plugin
+-- dashboard, plugins/talaria/{desktop,}/plugin.js useSupabaseData('v_talaria_renko',
+-- {order: 'session_date.desc,brick_index.desc', limit: '10'/'200'})) is ONLY
+-- satisfiable if nt_renko_bricks (owned by noble-trader-fastapi-backend)
+-- retains AT LEAST the current + previous session's live brick grid per
+-- symbol. That table's renko_brick_retention_days default (2 — "today +
+-- yesterday") was deliberately sized for exactly this: see
+-- regime_platform/sweep_orchestrator/renko_retention.py's module docstring
+-- ("...so the chart's 10-brick window is always the latest session").
+--
+-- If noble-trader-fastapi-backend's Track A work (separating durable
+-- daily-close storage from brick-level retention, so the backlog can
+-- finally be pruned without breaking the nobletradingapp-backend
+-- correlation-overview endpoint, which reads a DIFFERENT 120-day window via
+-- v_talaria_daily_close / nt_daily_close) EVER changes
+-- renko_brick_retention_days to less than 2, or changes WHICH rows count as
+-- "live" (brick_size must still match each symbol's current
+-- config/brick_params.yaml — see renko_retention.py's stale-brick_size
+-- pass), this view (and the dashboard/plugin charts reading it) breaks or
+-- goes stale. Any change to that retention policy MUST be checked against
+-- this dependency before shipping.
 CREATE OR REPLACE VIEW public.v_talaria_renko AS
 SELECT
   r.symbol,
