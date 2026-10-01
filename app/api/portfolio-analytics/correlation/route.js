@@ -5,18 +5,28 @@
 // (X-API-Key via utils/portfolio-cache.callWebappBackend).
 //
 // Vercel Hobby functions hard-stop at ~10s. Free-tier Render compute often
-// takes longer than that, so this route is STALE-FIRST:
+// takes longer than that, so this route NEVER blocks the request on a
+// backend call:
 //   * any cached payload is returned immediately (even past the 12h TTL),
-//     marked `stale` when expired — cron `/api/portfolio-analytics/warm`
-//     refreshes the row
-//   * compute only when there is no cache row, or `?refresh=1`, and then
-//     with a short budget so we always return JSON before Vercel kills us
+//     marked `stale` when expired
+//   * `?refresh=1` kicks a background recompute and returns the CURRENT
+//     cached payload (marked `refreshing: true`) immediately — it does NOT
+//     await the recompute inline. (2026-10-01 incident: the old code
+//     awaited computeAndCacheCorrelation inline on ?refresh=1 regardless of
+//     whether a cached payload existed; the combined Supabase reads +
+//     8s-budgeted backend call routinely exceeded Vercel's hard 10s kill,
+//     producing FUNCTION_INVOCATION_TIMEOUT 504s instead of ever reaching
+//     the AbortController's own 8s guard.)
+//   * only a true cache miss (no row at all) also falls back to a
+//     "warming" placeholder when there's nothing to serve yet
+//   * cron `/api/portfolio-analytics/warm` (55s budget) is the reliable
+//     fill path for a cold cache
 //
 // GET  /api/portfolio-analytics/correlation           — cached / stale-first
-// GET  /api/portfolio-analytics/correlation?refresh=1 — try recompute, else stale
+// GET  /api/portfolio-analytics/correlation?refresh=1 — background recompute, serve cache now
 // =============================================================================
 
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import {
   computeAndCacheCorrelation,
@@ -26,7 +36,6 @@ import {
 } from "@/utils/portfolio-cache";
 
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
-const ON_DEMAND_COMPUTE_MS = 8_000;
 
 export async function GET(request) {
   const { userId } = await auth();
@@ -72,7 +81,8 @@ export async function GET(request) {
     : Infinity;
   const fresh = hasPayload && ageMs < CACHE_TTL_MS;
 
-  // Stale-first: never block a page load on Render compute.
+  // Serve cache immediately when it's fresh and no refresh was requested —
+  // the common, fast path.
   if (hasPayload && !forceRefresh) {
     return NextResponse.json({
       ...cached.payload,
@@ -90,50 +100,45 @@ export async function GET(request) {
     );
   }
 
-  // Empty cache (or refresh): do NOT wait on free-tier Render inside the
-  // request — Vercel Hobby kills the function at ~10s. Kick a best-effort
-  // recompute in the background and return immediately so the panel can
-  // show a friendly "warming" state. Cron /api/portfolio-analytics/warm
-  // is the reliable fill path (55s budget).
-  if (!hasPayload && !forceRefresh) {
-    startBackgroundWarm("correlation", planSlug, symbols);
+  // Cache miss OR explicit refresh: never await the recompute inline —
+  // Vercel Hobby kills the function at ~10s and the Supabase reads above
+  // already eat into that budget. Kick a best-effort recompute in the
+  // background (55s budget, same as cron) and respond immediately: with
+  // the existing cached payload (marked `refreshing`) when we have one,
+  // or a "warming" placeholder when we don't.
+  startBackgroundWarm(planSlug, symbols);
+
+  if (hasPayload) {
     return NextResponse.json({
-      error: "Portfolio analytics are warming up.",
-      warming: true,
-      hint: "This fills automatically in the background. Refresh in a minute.",
+      ...cached.payload,
+      computed_at: cached.computed_at,
+      cached: true,
+      stale: !fresh,
+      refreshing: true,
     });
   }
 
-  try {
-    const computed = await computeAndCacheCorrelation(planSlug, symbols, {
-      timeoutMs: ON_DEMAND_COMPUTE_MS,
-    });
-    if (!computed.ok) {
-      return respondWithStaleOrError(
-        cached,
-        computed.error || computed.write_error || "Correlation recompute failed."
-      );
-    }
-    return NextResponse.json({ ...computed, cached: false, stale: false });
-  } catch (e) {
-    return respondWithStaleOrError(cached, String(e));
-  }
+  return NextResponse.json({
+    error: "Portfolio analytics are warming up.",
+    warming: true,
+    hint: "This fills automatically in the background. Refresh in a minute.",
+  });
 }
 
-function startBackgroundWarm(kind, planSlug, symbols) {
-  const run =
-    kind === "correlation"
-      ? computeAndCacheCorrelation(planSlug, symbols, { timeoutMs: 55_000 })
-      : computeAndCacheAgreement(planSlug, symbols, 90, { timeoutMs: 55_000 });
-  run.then((r) => {
-    console.log(`[portfolio-cache] background ${kind} warm`, {
-      ok: r?.ok,
-      planSlug,
-      error: r?.error ?? null,
-    });
-  }).catch((e) => {
-    console.warn(`[portfolio-cache] background ${kind} warm failed`, String(e));
-  });
+function startBackgroundWarm(planSlug, symbols) {
+  after(() =>
+    computeAndCacheCorrelation(planSlug, symbols, { timeoutMs: 55_000 })
+      .then((r) => {
+        console.log(`[portfolio-cache] background correlation warm`, {
+          ok: r?.ok,
+          planSlug,
+          error: r?.error ?? null,
+        });
+      })
+      .catch((e) => {
+        console.warn(`[portfolio-cache] background correlation warm failed`, String(e));
+      })
+  );
 }
 
 function respondWithStaleOrError(cached, message) {
@@ -156,3 +161,4 @@ function respondWithStaleOrError(cached, message) {
     { status: 200 }
   );
 }
+

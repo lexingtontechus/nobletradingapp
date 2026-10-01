@@ -2150,6 +2150,7 @@ function SignalRiskCard() {
               <p className="text-xs opacity-50 mb-2">
                 as of {formatDate(overview.computed_at)}{overview.cached ? " · cached" : ""}
                 {overview.stale ? " · stale (last good result)" : ""}
+                {overview.refreshing ? " · refreshing in the background…" : ""}
               </p>
             )}
 
