@@ -1219,13 +1219,22 @@ function SignalRankingBoard({ rows }) {
   );
 }
 
-function KellyTable({ sweeps, kelly, symbolList }) {
+function KellyTable({ sweeps, kelly, symbolList, symbolRows }) {
   // Prefer dedicated v_talaria_kelly_by_symbol rows (stable contract);
   // fall back to merged sweeps if the view is empty/missing.
   const source = (kelly && kelly.length ? kelly : sweeps) || [];
+  // asset_class is NOT on the Kelly rows (v_talaria_kelly_by_symbol omits it) —
+  // it lives on the symbols roster (v_talaria_symbols). Mirror the plugin: look
+  // it up per symbol so rows group into Commodities/Forex/Crypto/Stocks instead
+  // of all collapsing into the "other" catch-all.
+  const assetClassOf = {};
+  (symbolRows || []).forEach((s) => {
+    if (s && s.symbol) assetClassOf[s.symbol] = s.asset_class || "other";
+  });
   const rows = (symbolList || []).map((sym) => {
     const row = source.find((s) => s.symbol === sym);
-    return row ? { symbol: sym, ...row } : { symbol: sym, _missing: true };
+    const asset_class = assetClassOf[sym] || (row && row.asset_class) || "other";
+    return row ? { symbol: sym, ...row, asset_class } : { symbol: sym, _missing: true, asset_class };
   });
 
   const groups = groupByAssetClass(rows);
@@ -1236,6 +1245,7 @@ function KellyTable({ sweeps, kelly, symbolList }) {
 
   const groupLabels = {
     commodities: "Commodities", forex: "Forex", crypto: "Crypto", stocks: "Stocks",
+    other: "Other",
   };
 
   return (
@@ -2986,7 +2996,7 @@ export default function DashboardPage() {
             <SignalRankingBoard rows={mergedSweeps} />
 
             {/* Kelly by symbol (grouped by asset class, sorted) */}
-            <KellyTable sweeps={mergedSweeps} kelly={kellyRows} symbolList={resolvedSymbolList} />
+            <KellyTable sweeps={mergedSweeps} kelly={kellyRows} symbolList={resolvedSymbolList} symbolRows={symbols} />
 
             {/* Paper portfolio (Precision Pro only) */}
             {isPro && (
