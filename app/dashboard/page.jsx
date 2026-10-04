@@ -1145,7 +1145,7 @@ function SignalRankingBoard({ rows }) {
         <p className="text-xs opacity-60 mb-3">
           <strong>RANK</strong> is an opportunity score (event-time freshness, setup type,
           recent TP, cell hit-rate) — not win probability. Prioritize capital by RANK;
-          size with Kelly/EV. Highest p_win is not always the best opportunity.
+          size with Kelly/EV. The highest claimed win% is not always the best opportunity.
           Ranked by positive EV first; EV &le; 0 rows are greyed out below.
         </p>
         {ranked.length === 0 ? (
@@ -1156,7 +1156,7 @@ function SignalRankingBoard({ rows }) {
               <thead>
                 <tr>
                   <th>Symbol</th>
-                  <th className="text-right">P_WIN</th>
+                  <th className="text-right">Claimed win%</th>
                   <th className="text-right">RANK</th>
                   <th className="text-right">EV</th>
                   <th>STATE</th>
@@ -1246,7 +1246,7 @@ function KellyTable({ sweeps, kelly, symbolList }) {
                 <th>Regime</th>
                 <th className="text-right">Aggression</th>
                 <th className="text-right">EV</th>
-                <th className="text-right">P_win</th>
+                <th className="text-right">Claimed win%</th>
                 <th className="text-right">Markov</th>
                 <th>Entry</th>
                 <th>SL</th>
