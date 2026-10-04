@@ -2490,7 +2490,7 @@ function EodReportView() {
             <p className="text-xs opacity-50 mb-3">
               {report.stale ? "Most recent report" : "Report"} for {report.report_date}
               {report.generated_at ? ` · generated ${formatDate(report.generated_at)}` : ""}
-              {report.llm_provider ? ` · commentary via ${report.llm_provider}` : ""}
+              {report.llm_provider ? ` · commentary via NVIDIA AI` : ""}
             </p>
 
             {report.stale && (
