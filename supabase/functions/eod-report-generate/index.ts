@@ -130,7 +130,7 @@ function symbolPrompt(rec: any, reportDate: string) {
         : `model expected value ${ev.toFixed(2)} (price units, not dollars)`;
     lines.push(
       `New signal issued today: direction ${s.signal}, regime ${s.regime || "unknown"}, ` +
-        `predicted win probability ${fmtPct(s.p_win)}, ${evNote}, ` +
+        `predicted win probability (bracket) ${fmtPct(s.p_win)}, ${evNote}, ` +
         `effective Kelly ${Number(s.effective_kelly ?? 0).toFixed(3)}.`
     );
   } else {

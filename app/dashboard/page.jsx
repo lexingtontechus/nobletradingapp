@@ -1417,9 +1417,9 @@ function CalibrationConfidenceBoard({ rows, outcomeBySide }) {
           Is <span className="font-mono">p_win</span> honest on the qualified book?
           Raw (pre-enforcement) bias is the product claim. Side is buy vs sell.
           Status is tightened: CALIBRATED needs ≥10 episodes, |bias| ≤ 0.05, and
-          expire ≤ 40%. Until <span className="font-mono">p_win_bracket</span> is
-          live, stated confidence is still <strong>direction confidence</strong>{" "}
-          (<span className="font-mono">p_dir</span>), not bracket-win probability.
+          expire ≤ 40%. <span className="font-mono">p_win_dir</span> is the
+          bracket probability (live since 2026-10-03).{" "}
+          <span className="font-mono">p_win_bracket</span> is deprecated.
         </p>
         <div className="overflow-x-auto">
           <table className="table table-sm">
@@ -1429,6 +1429,7 @@ function CalibrationConfidenceBoard({ rows, outcomeBySide }) {
                 <th>Side</th>
                 <th>Episodes</th>
                 <th>p_dir raw</th>
+                <th>p_win_dir</th>
                 <th>Win closed</th>
                 <th>Bias raw</th>
                 <th>Brier</th>
@@ -1447,6 +1448,7 @@ function CalibrationConfidenceBoard({ rows, outcomeBySide }) {
                     <td className="uppercase text-xs">{r.signal}</td>
                     <td className="font-mono">{r.n_episodes ?? 0}</td>
                     <td>{r.avg_p_win_raw != null ? fmtKellyPct(r.avg_p_win_raw) : "—"}</td>
+                    <td>{r.avg_p_win_dir != null ? fmtKellyPct(r.avg_p_win_dir) : "—"}</td>
                     <td>{r.win_rate_closed != null ? fmtKellyPct(r.win_rate_closed) : "—"}</td>
                     <td
                       className={
@@ -1516,7 +1518,8 @@ function CalibrationTable({ rows }) {
           confidence higher than delivered (be cautious). UNDERCONFIDENT = wins more
           than predicted. Near 0 = honest. This is not the L1 product bar — see
           “L1 calibration confidence” above for side-split, tightened status.
-          Stated confidence is still direction confidence until p_win_bracket is live.
+          <span className="font-mono">p_win_dir</span> is the bracket probability
+          (live since 2026-10-03). <span className="font-mono">p_win_bracket</span> is deprecated.
         </p>
         <div className="overflow-x-auto">
           <table className="table table-sm">
