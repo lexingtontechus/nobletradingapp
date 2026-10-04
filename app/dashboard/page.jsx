@@ -1119,6 +1119,21 @@ function evOf(r) {
   return v == null ? null : Number(v);
 }
 
+// Order-execution style — what the backend AggressionDispatcher derives from
+// ev_per_dollar (NOT conviction): passive = deep/patient limit, mid = midpoint
+// limit, aggressive = immediate market order. Deliberately labelled as an
+// execution method, distinct from the Signal column (the direction/sizing call).
+function fmtOrderStyle(label) {
+  if (!label) return "—";
+  const key = String(label).toLowerCase();
+  const map = {
+    passive: "Patient limit",
+    mid: "Midpoint limit",
+    aggressive: "Immediate market",
+  };
+  return map[key] || String(label).replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 // Signal ranking board — prioritize capital by RANK (not highest p_win).
 // Positive-EV signals rank first (sorted by RANK within that group); rows
 // with EV <= 0 (or no EV at all) sort after and render greyed out — they're
@@ -1228,13 +1243,19 @@ function KellyTable({ sweeps, kelly, symbolList }) {
       <div className="card-body">
         <h3 className="card-title text-lg">Kelly by symbol</h3>
         <p className="text-xs opacity-60 mb-3">
-          Latest signal per symbol. Table grouped by asset class, sorted by
-          symbol. Effective Kelly = post-EV scaling fraction of the book the
-          engine would risk. Dash (—) = not enough data. Signal shows BUY/SELL
-          only once a signal has qualified with nonzero Kelly sizing behind it —
-          otherwise it reads WAIT (no directional lean) or CAUTION (a lean
-          exists but hasn&apos;t cleared the qualification gate), so a raw
-          direction isn&apos;t shown with the same weight as an actionable one.
+          Latest signal per symbol — <strong>every symbol in your plan roster,
+          qualified or not</strong> (this is not a qualified-only list). Table
+          grouped by asset class, sorted by symbol. Effective Kelly = post-EV
+          scaling fraction of the book the engine would risk. Dash (—) = not
+          enough data. Signal shows BUY/SELL only once a signal has qualified
+          with nonzero Kelly sizing behind it — otherwise it reads WAIT (no
+          directional lean) or CAUTION (a lean exists but hasn&apos;t cleared the
+          qualification gate), so a raw direction isn&apos;t shown with the same
+          weight as an actionable one. <strong>Order style</strong> is the
+          execution method the engine would use if it traded — derived from EV
+          per dollar risked, not conviction (a thin edge is filled immediately;
+          a strong edge waits for a better price). It is independent of the
+          Signal column, so a CAUTION row can still carry any order style.
         </p>
         <div className="overflow-x-auto">
           <table className="table table-sm">
@@ -1244,7 +1265,7 @@ function KellyTable({ sweeps, kelly, symbolList }) {
                 <th>Signal</th>
                 <th className="text-right">Kelly</th>
                 <th>Regime</th>
-                <th className="text-right">Aggression</th>
+                <th className="text-right">Order style</th>
                 <th className="text-right">EV</th>
                 <th className="text-right">Claimed win%</th>
                 <th className="text-right">Markov</th>
@@ -1275,7 +1296,7 @@ function KellyTable({ sweeps, kelly, symbolList }) {
                               : "—"}
                           </td>
                           <td>{fmtRegime(r.regime) || "—"}</td>
-                          <td className="text-right">{r.aggression || "—"}</td>
+                          <td className="text-right">{fmtOrderStyle(r.aggression)}</td>
                           <td className="text-right">
                             {r.ev != null ? "$" + Number(r.ev).toFixed(2) : "—"}
                           </td>
