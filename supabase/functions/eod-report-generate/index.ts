@@ -25,8 +25,7 @@
 // same store as nobletradingapp's Vercel env — copy the same values over):
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY   — auto-injected
 //   INTERNAL_FUNCTION_SECRET                  — shared secret, manual trigger
-//   OPENROUTER_API_KEY, OPENROUTER_MODEL       — primary LLM provider
-//   NVIDIA_NIM_API_KEY, NVIDIA_NIM_MODEL        — fallback LLM provider
+//   NVIDIA_NIM_API_KEY, NVIDIA_NIM_MODEL       — LLM provider (OpenRouter removed)
 // =============================================================================
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -35,24 +34,18 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const INTERNAL_SECRET = Deno.env.get("INTERNAL_FUNCTION_SECRET") ?? "";
 
-const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY") ?? "";
 const NVIDIA_NIM_API_KEY = Deno.env.get("NVIDIA_NIM_API_KEY") ?? "";
-// 2026-09-12: minimax/minimax-m3:free was retired — OpenRouter now 404s
-// with "This model is unavailable for free... use minimax/minimax-m3"
-// (the paid slug). Switched to "openrouter/auto", OpenRouter's own
-// meta-router — it picks a suitable underlying model per request and
-// respects the account-level default/fallback model configured in the
-// OpenRouter dashboard, so this default shouldn't go stale the same way
-// a specific free-tier model ID does. NVIDIA NIM's default is
-// unaffected — still verified working (2026-09-05).
-const OPENROUTER_MODEL = Deno.env.get("OPENROUTER_MODEL") || "openrouter/auto";
+// NVIDIA NIM (integrate.api.nvidia.com) is the only LLM provider. OpenRouter
+// was removed (2026-10-04): it was never actually used in this deployment, and
+// its default model kept going stale. NVIDIA NIM's default is verified working
+// (2026-09-05).
 const NVIDIA_NIM_MODEL = Deno.env.get("NVIDIA_NIM_MODEL") || "meta/llama-3.2-11b-vision-instruct";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
   auth: { persistSession: false },
 });
 
-// ─── LLM commentary (OpenRouter primary, NVIDIA NIM fallback) ───────────────
+// ─── LLM commentary (NVIDIA NIM) ────────────────────────────────────────────
 
 const SYSTEM_PROMPT = [
   "You are writing a factual accuracy report for Talaria, a trading-signal",
@@ -85,14 +78,6 @@ async function callChatCompletions(baseUrl: string, apiKey: string, model: strin
 }
 
 async function generateCommentary(prompt: string): Promise<{ text: string | null; provider: string | null }> {
-  if (OPENROUTER_API_KEY) {
-    try {
-      const text = await callChatCompletions("https://openrouter.ai/api/v1", OPENROUTER_API_KEY, OPENROUTER_MODEL, prompt);
-      return { text, provider: "openrouter" };
-    } catch (e) {
-      console.warn("[eod-report] OpenRouter commentary failed, falling back to NVIDIA NIM:", (e as Error).message);
-    }
-  }
   if (NVIDIA_NIM_API_KEY) {
     try {
       const text = await callChatCompletions("https://integrate.api.nvidia.com/v1", NVIDIA_NIM_API_KEY, NVIDIA_NIM_MODEL, prompt);

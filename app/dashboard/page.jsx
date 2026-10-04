@@ -2433,6 +2433,15 @@ function loadEodReport() {
   return eodReportPromise;
 }
 
+// Friendly label for the stored llm_provider value (internal token → display).
+// Map — don't hardcode — so the label always matches the provider that actually
+// produced the row (NVIDIA NIM is the only live provider; OpenRouter is legacy).
+const LLM_PROVIDER_LABELS = { nvidia_nim: "NVIDIA AI", openrouter: "OpenRouter" };
+function llmProviderLabel(p) {
+  if (!p) return "";
+  return LLM_PROVIDER_LABELS[String(p).toLowerCase()] || String(p);
+}
+
 function EodReportView() {
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -2490,7 +2499,7 @@ function EodReportView() {
             <p className="text-xs opacity-50 mb-3">
               {report.stale ? "Most recent report" : "Report"} for {report.report_date}
               {report.generated_at ? ` · generated ${formatDate(report.generated_at)}` : ""}
-              {report.llm_provider ? ` · commentary via NVIDIA AI` : ""}
+              {report.llm_provider ? ` · commentary via ${llmProviderLabel(report.llm_provider)}` : ""}
             </p>
 
             {report.stale && (
