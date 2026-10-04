@@ -1303,6 +1303,30 @@ function KellyTable({ sweeps, kelly, symbolList }) {
   );
 }
 
+// Wilson score 95% lower bound on the true win rate, from the resolved counts
+// the health view exposes (n_tp / n_resolved). Direct port of wilsonLower()
+// in the Talaria desktop plugin (plugins/talaria/desktop/plugin.js) so the
+// dashboard and the plugin show the same WR LB — the value was never a column
+// on v_talaria_signal_health; the plugin always computed it client-side.
+function wilsonLower(n, wins) {
+  n = Number(n);
+  wins = Number(wins);
+  if (!isFinite(n) || n <= 0) return 0;
+  const z = 1.96;
+  const phat = Math.min(1, Math.max(0, wins / n));
+  const denom = 1 + (z * z) / n;
+  const centre = (phat + (z * z) / (2 * n)) / denom;
+  const half = (z * Math.sqrt((phat * (1 - phat) + (z * z) / (4 * n)) / n)) / denom;
+  return Math.min(1, Math.max(0, centre - half));
+}
+
+// Format the WR LB cell for the health scoreboard; "—" when there is nothing
+// resolved to bound (mirrors the plugin's `n_resolved > 0 && n_tp != null` gate).
+function fmtWilsonLb(r) {
+  if (!r || !(Number(r.n_resolved) > 0) || r.n_tp == null) return "—";
+  return (wilsonLower(Number(r.n_resolved), Number(r.n_tp)) * 100).toFixed(1) + "%";
+}
+
 function SignalHealthTable({ rows }) {
   // Sort rows by symbol name for consistent display
   const sortedRows = [...(rows || [])].sort((a, b) =>
@@ -1341,11 +1365,7 @@ function SignalHealthTable({ rows }) {
                       ? (r.win_rate * 100).toFixed(1) + "%"
                       : "—"}
                   </td>
-                  <td className="text-sm">
-                    {r.wilson_lb != null
-                      ? (r.wilson_lb * 100).toFixed(1) + "%"
-                      : "—"}
-                  </td>
+                  <td className="text-sm">{fmtWilsonLb(r)}</td>
                   <td
                     className={
                       r.bias != null && Number(r.bias) > 0.1
@@ -1428,14 +1448,14 @@ function CalibrationConfidenceBoard({ rows, outcomeBySide }) {
                 <th>Symbol</th>
                 <th>Side</th>
                 <th>Episodes</th>
-                <th>p_dir raw</th>
-                <th>p_win_dir</th>
-                <th>Win closed</th>
-                <th>Bias raw</th>
-                <th>Brier</th>
-                <th>Expire</th>
-                <th>Status L1</th>
-                <th>Evidence</th>
+                <th>Claimed win%</th>
+                <th>Bracket win%</th>
+                <th>Realized win%</th>
+                <th>Bias (raw)</th>
+                <th>Brier score</th>
+                <th>Expire rate</th>
+                <th>Calibration status</th>
+                <th>Data confidence</th>
               </tr>
             </thead>
             <tbody>
