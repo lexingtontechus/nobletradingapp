@@ -2416,15 +2416,34 @@ function SignalRiskCard() {
 // a dismissable one. Reads a report built once at end-of-day
 // (app/lib/eod-report/build.js via /api/eod-report/generate) — this route
 // never triggers generation itself, so loading this tab never calls an LLM.
+//
+// The API returns the LATEST AVAILABLE report (not strictly today's) and a
+// `stale` flag; the report is only built at 21:00 UTC, so before then the most
+// recent day's report is shown, labelled as such.
+let eodReportPromise = null;
+function loadEodReport() {
+  if (!eodReportPromise) {
+    eodReportPromise = fetch("/api/eod-report")
+      .then((r) => (r.ok ? r.json() : { error: `HTTP ${r.status}` }))
+      .catch((e) => {
+        eodReportPromise = null; // allow retry on transient failure
+        throw e;
+      });
+  }
+  return eodReportPromise;
+}
+
 function EodReportView() {
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Fetch once per page load and reuse across tab switches — the report is a
+  // shared daily digest built at EOD, so re-fetching on every remount just
+  // adds a round-trip for identical content.
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/eod-report");
-      setReport(await res.json());
+      setReport(await loadEodReport());
     } catch (e) {
       setReport({ error: String(e) });
     } finally {
@@ -2469,10 +2488,17 @@ function EodReportView() {
         {!loading && stats && (
           <>
             <p className="text-xs opacity-50 mb-3">
-              Report for {report.report_date}
+              {report.stale ? "Most recent report" : "Report"} for {report.report_date}
               {report.generated_at ? ` · generated ${formatDate(report.generated_at)}` : ""}
               {report.llm_provider ? ` · commentary via ${report.llm_provider}` : ""}
             </p>
+
+            {report.stale && (
+              <p className="text-xs opacity-60 mb-3">
+                Today&apos;s report generates after market close (21:00 UTC) — showing the
+                latest completed day until then.
+              </p>
+            )}
 
             {report.digest_summary && (
               <p className="text-sm mb-4 italic opacity-90">{report.digest_summary}</p>
