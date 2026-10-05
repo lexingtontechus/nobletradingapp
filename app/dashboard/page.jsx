@@ -1914,6 +1914,13 @@ function agreementColor(rate) {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
+// Shared-session count below which the correlation matrix is withheld in favour
+// of an honest "needs more history" state. Matches the backend detector's own
+// bar (MIN_WINDOW + 10 = 20 shared returns): below it corr_regime is
+// "insufficient_history" anyway, so "shown" and "trustworthy" become the same
+// condition. Data source: nt_daily_close (via v_talaria_daily_close).
+const CORRELATION_MATURITY_SESSIONS = 20;
+
 // daisyUI `list` (https://daisyui.com/components/list/) used as a small
 // titled "top pairs" card — the callout for the correlation/agreement
 // matrices' most-notable pairs, so they read as a scannable highlight
@@ -2118,6 +2125,18 @@ function SignalRiskCard() {
               />
             </div>
 
+            {Array.isArray(overview.symbols_dropped) && overview.symbols_dropped.length > 0 && (
+              <div className="alert alert-warning mb-3">
+                <span className="text-xs">
+                  Showing <strong>{overview.symbols.length}</strong> of{" "}
+                  <strong>{overview.symbols_requested?.length ?? overview.symbols.length}</strong>{" "}
+                  plan symbols — the rest don&apos;t share enough daily-price history to
+                  correlate yet:{" "}
+                  <span className="font-mono">{overview.symbols_dropped.join(", ")}</span>.
+                </span>
+              </div>
+            )}
+
             <p className="text-xs opacity-50 mb-4">
               Kelly concentration = combined risk of each symbol&apos;s current
               regime-gated Kelly sizing, accounting for correlation, divided by what
@@ -2208,92 +2227,6 @@ function SignalRiskCard() {
               </p>
             )}
 
-            {(() => {
-              const pairs = [];
-              for (let i = 0; i < overview.symbols.length; i++) {
-                for (let j = i + 1; j < overview.symbols.length; j++) {
-                  const v = overview.correlation_matrix[i]?.[j];
-                  if (v != null) pairs.push({ a: overview.symbols[i], b: overview.symbols[j], v });
-                }
-              }
-              const mostConcentrated = [...pairs].sort((x, y) => y.v - x.v).slice(0, 3).filter((p) => p.v > 0.3);
-              const bestHedges = [...pairs].sort((x, y) => x.v - y.v).slice(0, 3).filter((p) => p.v < -0.1);
-
-              return (
-                <div className="mb-2">
-                  <h4 className="text-lg font-semibold mb-1">Correlation matrix</h4>
-                  <p className="text-xs opacity-50 mb-2">
-                    Correlation of daily price returns between symbol pairs — this is about shared
-                    price risk, not signal performance (that&apos;s Signal Health, in the Analysis
-                    tab). A red pair moves together: holding qualified signals on both is closer to
-                    one bet than two. A green pair offsets each other — a genuine hedge.
-                  </p>
-
-                  <div className="grid gap-3 sm:grid-cols-2 mb-3">
-                    <PairList
-                      title="Most concentrated"
-                      tone="error"
-                      pairs={mostConcentrated}
-                      valueFormatter={(p) => p.v.toFixed(2)}
-                      emptyLabel="No pair above 0.30"
-                    />
-                    <PairList
-                      title="Best hedges"
-                      tone="success"
-                      pairs={bestHedges}
-                      valueFormatter={(p) => p.v.toFixed(2)}
-                      emptyLabel="No pair below -0.10"
-                    />
-                  </div>
-
-                  <details>
-                    <summary className="text-xs font-semibold cursor-pointer opacity-80">
-                      Full matrix
-                    </summary>
-                    <div className="overflow-x-auto mt-2">
-                      <table className="border-collapse">
-                        <thead>
-                          <tr>
-                            <th className="text-xs p-1"></th>
-                            {overview.symbols.map((s) => (
-                              <th key={s} className="text-xs p-1 font-mono opacity-70">{s}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {overview.symbols.map((rowSym, i) => (
-                            <tr key={rowSym}>
-                              <th className="text-xs p-1 font-mono opacity-70 text-right">{rowSym}</th>
-                              {overview.symbols.map((colSym, j) => {
-                                const v = overview.correlation_matrix[i]?.[j];
-                                return (
-                                  <td
-                                    key={colSym}
-                                    title={`${rowSym} × ${colSym}: ${Number(v ?? 0).toFixed(3)}`}
-                                    className="text-center text-xs font-mono w-12 h-8"
-                                    style={{ backgroundColor: corrColor(v), color: "#fff" }}
-                                  >
-                                    {Number(v ?? 0).toFixed(2)}
-                                  </td>
-                                );
-                              })}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    <div className="flex items-center gap-2 mt-3 text-xs opacity-60">
-                      <span>diversifying (-1)</span>
-                      <div
-                        className="h-2 w-40 rounded"
-                        style={{ background: `linear-gradient(to right, ${corrColor(-1)}, ${corrColor(0)}, ${corrColor(1)})` }}
-                      />
-                      <span>concentrated risk (+1)</span>
-                    </div>
-                  </details>
-                </div>
-              );
-            })()}
           </>
         )}
 
@@ -2402,6 +2335,141 @@ function SignalRiskCard() {
                 <span className="ml-2 opacity-50">gray/dash = not enough concurrent days yet</span>
               </div>
             </details>
+          </>
+        )}
+
+        {/* Correlation matrix — demoted below the working lenses (regime
+            alignment + agreement) and gated on history maturity: it needs
+            ~20 shared sessions (the detector's own bar) before it's meaningful.
+            Before that, an honest "available in ~N days" state replaces the
+            near-empty grid. Source: nt_daily_close via v_talaria_daily_close
+            (repointed 2026-10-04, migration 0027). */}
+        {overview?.correlation_matrix && (
+          <>
+            <div className="divider my-2" />
+            {(() => {
+              const sessions = Number(overview.n_sessions_shared ?? 0);
+              const mature = sessions >= CORRELATION_MATURITY_SESSIONS;
+              if (!mature) {
+                const remaining = Math.max(0, CORRELATION_MATURITY_SESSIONS - sessions);
+                return (
+                  <div className="mb-2">
+                    <h4 className="text-lg font-semibold mb-1">Correlation matrix</h4>
+                    <p className="text-xs opacity-60 mb-2">
+                      Correlation of daily price returns between symbol pairs — how much
+                      shared price risk sits behind holding qualified signals on both.
+                      It needs a run of shared trading sessions before the numbers mean
+                      anything, so it&apos;s withheld until then rather than shown thin.
+                    </p>
+                    <div className="alert">
+                      <span className="text-xs">
+                        Building history — <strong>{sessions}</strong> of{" "}
+                        <strong>{CORRELATION_MATURITY_SESSIONS}</strong> shared trading
+                        sessions so far. This unlocks in about{" "}
+                        <strong>{remaining}</strong> more session{remaining === 1 ? "" : "s"}
+                        {" "}(roughly {remaining} trading day{remaining === 1 ? "" : "s"}).
+                        Regime alignment and concurrent-signal agreement above are live now.
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+
+              const pairs = [];
+              for (let i = 0; i < overview.symbols.length; i++) {
+                for (let j = i + 1; j < overview.symbols.length; j++) {
+                  const v = overview.correlation_matrix[i]?.[j];
+                  if (v != null) pairs.push({ a: overview.symbols[i], b: overview.symbols[j], v });
+                }
+              }
+              const mostConcentrated = [...pairs].sort((x, y) => y.v - x.v).slice(0, 3).filter((p) => p.v > 0.3);
+              const bestHedges = [...pairs].sort((x, y) => x.v - y.v).slice(0, 3).filter((p) => p.v < -0.1);
+
+              return (
+                <div className="mb-2">
+                  <h4 className="text-lg font-semibold mb-1">Correlation matrix</h4>
+                  <p className="text-xs opacity-50 mb-2">
+                    Correlation of daily price returns between symbol pairs — this is about shared
+                    price risk, not signal performance (that&apos;s Signal Health, in the Analysis
+                    tab). A red pair moves together: holding qualified signals on both is closer to
+                    one bet than two. A green pair offsets each other — a genuine hedge.
+                  </p>
+
+                  {pairs.length > 0 && (
+                    <div className="grid gap-3 sm:grid-cols-2 mb-3">
+                      <PairList
+                        title="Most concentrated"
+                        tone="error"
+                        pairs={mostConcentrated}
+                        valueFormatter={(p) => p.v.toFixed(2)}
+                        emptyLabel="No pair above 0.30"
+                      />
+                      <PairList
+                        title="Best hedges"
+                        tone="success"
+                        pairs={bestHedges}
+                        valueFormatter={(p) => p.v.toFixed(2)}
+                        emptyLabel="No pair below -0.10"
+                      />
+                    </div>
+                  )}
+
+                  <details>
+                    <summary className="text-xs font-semibold cursor-pointer opacity-80">
+                      Full matrix
+                    </summary>
+                    <div className="overflow-x-auto mt-2">
+                      <table className="border-collapse">
+                        <thead>
+                          <tr>
+                            <th className="text-xs p-1"></th>
+                            {overview.symbols.map((s) => (
+                              <th key={s} className="text-xs p-1 font-mono opacity-70">{s}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {overview.symbols.map((rowSym, i) => (
+                            <tr key={rowSym}>
+                              <th className="text-xs p-1 font-mono opacity-70 text-right">{rowSym}</th>
+                              {overview.symbols.map((colSym, j) => {
+                                const v = overview.correlation_matrix[i]?.[j];
+                                const isNull = v == null;
+                                return (
+                                  <td
+                                    key={colSym}
+                                    title={
+                                      isNull
+                                        ? `${rowSym} × ${colSym}: no shared history`
+                                        : `${rowSym} × ${colSym}: ${Number(v).toFixed(3)}`
+                                    }
+                                    className={
+                                      "text-center text-xs font-mono w-12 h-8 " +
+                                      (isNull ? "bg-base-300 opacity-40" : "")
+                                    }
+                                    style={isNull ? undefined : { backgroundColor: corrColor(v), color: "#fff" }}
+                                  >
+                                    {isNull ? "—" : Number(v).toFixed(2)}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="flex items-center gap-2 mt-3 text-xs opacity-60">
+                      <span>diversifying (-1)</span>
+                      <div
+                        className="h-2 w-40 rounded"
+                        style={{ background: `linear-gradient(to right, ${corrColor(-1)}, ${corrColor(0)}, ${corrColor(1)})` }}
+                      />
+                      <span>concentrated risk (+1)</span>
+                    </div>
+                  </details>
+                </div>
+              );
+            })()}
           </>
         )}
       </div>
