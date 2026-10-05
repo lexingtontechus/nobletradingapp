@@ -21,6 +21,14 @@
 //
 // POST body: { "date"?: "YYYY-MM-DD" }  — defaults to today (UTC).
 //
+// Episode dedup (2026-10-04): nt_signal_sim captures a row on EVERY 15-min
+// light-sweep tick for a still-valid signal, so one economic signal lands as
+// N identical rows (same symbol+signal+entry_price+stop_loss). Sat 2026-10-03
+// had 484 "qualified" rows but only 46 distinct signals (10.5x). Counting raw
+// rows made the reported win rate / P&L a function of how long a signal stayed
+// valid, not of signal quality. Every metric below is now computed over
+// DEDUPED rows (one per episode); raw counts are kept only for observability.
+//
 // Env vars (set via Supabase Dashboard -> Edge Functions -> Secrets, NOT the
 // same store as nobletradingapp's Vercel env — copy the same values over):
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY   — auto-injected
@@ -99,6 +107,22 @@ function dayBounds(dateStr: string) {
 
 function fmtPct(x: number | null | undefined) {
   return x == null ? "unknown" : `${(Number(x) * 100).toFixed(1)}%`;
+}
+
+// Collapse per-tick re-captures of the SAME economic signal to one row
+// (2026-10-04). The light sweep writes an nt_signal_sim row every 15 min while
+// a signal stays valid, so one signal becomes N identical rows (same
+// symbol+signal+entry_price+stop_loss) all resolving the same way. Counting
+// them as N independent trials made win rate and P&L a function of signal
+// DURATION, not quality (Sat 2026-10-03: 484 rows -> 46 distinct signals).
+// Mirrors bracket_reachability._dedupe_episodes in the backend.
+function dedupeEpisodes(rows: any[]): any[] {
+  const seen = new Map<string, any>();
+  for (const r of rows) {
+    const key = [r.symbol, r.signal, r.regime, r.entry_price, r.take_profit, r.stop_loss].join("|");
+    if (!seen.has(key)) seen.set(key, r);
+  }
+  return [...seen.values()];
 }
 
 function symbolPrompt(rec: any, reportDate: string) {
@@ -187,7 +211,7 @@ async function buildEodReport(reportDate: string) {
       .order("ts", { ascending: false }),
     supabase
       .from("nt_signal_sim")
-      .select("symbol, signal, outcome, pnl_dollars, resolved_at")
+      .select("symbol, signal, entry_price, stop_loss, take_profit, outcome, pnl_dollars, resolved_at")
       .eq("qualified", true)
       .not("outcome", "is", null)
       .gte("resolved_at", start)
@@ -197,8 +221,8 @@ async function buildEodReport(reportDate: string) {
     supabase.from("v_talaria_fixed_basket_daily").select("*").order("day", { ascending: false }).limit(30),
   ]);
 
-  const newSignals = newRes.data || [];
-  const resolvedSignals = resolvedRes.data || [];
+  const newSignals = dedupeEpisodes(newRes.data || []);
+  const resolvedSignals = dedupeEpisodes(resolvedRes.data || []);
   const calLatest = calLatestRes.data || [];
   const calWeekly = calWeeklyRes.data || [];
   const benchmarkRows = benchmarkRes.data || [];
