@@ -9,7 +9,7 @@
 -- CREATE OR REPLACE it with the same structure plus the new columns.
 -- =============================================================================
 
-DROP MATERIALIZED VIEW IF EXISTS public.v_talaria_latest_signals;
+DROP MATERIALIZED VIEW IF EXISTS public.v_talaria_latest_signals CASCADE;
 
 CREATE MATERIALIZED VIEW public.v_talaria_latest_signals AS
 SELECT
