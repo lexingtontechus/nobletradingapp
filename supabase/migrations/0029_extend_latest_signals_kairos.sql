@@ -9,7 +9,9 @@
 -- CREATE OR REPLACE it with the same structure plus the new columns.
 -- =============================================================================
 
-CREATE OR REPLACE VIEW public.v_talaria_latest_signals AS
+DROP MATERIALIZED VIEW IF EXISTS public.v_talaria_latest_signals;
+
+CREATE MATERIALIZED VIEW public.v_talaria_latest_signals AS
 SELECT
   sym.symbol,
   l.sweep_timestamp,
@@ -77,8 +79,21 @@ LEFT JOIN LATERAL (
   LIMIT 1
 ) sim ON true;
 
-COMMENT ON VIEW public.v_talaria_latest_signals IS
+COMMENT ON MATERIALIZED VIEW public.v_talaria_latest_signals IS
   'Latest sweep result per active symbol + Kairos rank stamp (183) + geometry fields (199). '
   'Refreshed by refresh_talaria_dashboard_cache() via pg_cron.';
 
 GRANT SELECT ON v_talaria_latest_signals TO anon, service_role;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_talaria_latest_signals_symbol
+  ON public.v_talaria_latest_signals (symbol);
+
+-- Recreate dependent view (dropped by CASCADE when the matview is dropped)
+CREATE OR REPLACE VIEW public.v_talaria_kelly_by_symbol AS
+SELECT
+  symbol, sweep_timestamp, signal, qualified, effective_kelly, kelly_f, regime,
+  aggression, ev, p_win, markov_p_up, entry_price, stop_loss, take_profit,
+  brick_size, sl_bricks, tp_bricks, kairos_rank_score, kairos_rank_gate_shadow
+FROM public.v_talaria_latest_signals;
+
+GRANT SELECT ON v_talaria_kelly_by_symbol TO anon, service_role;
