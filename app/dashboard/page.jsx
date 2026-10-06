@@ -710,6 +710,23 @@ function RenkoSection({ sweeps, symbolList, selectedSym, onSelect, renkoBricks, 
           (see the badge). Hover a block for full prices. Switch symbols to
           re-analyze.
         </p>
+        {(() => {
+          const edge = (regimeEdge || []).find(
+            (e) => e.symbol === activeSym && e.signal === (sigDirection || "").toLowerCase() && e.regime === sweepRow?.regime
+          );
+          if (!edge) return null;
+          const wr = Number(edge.win_rate) * 100;
+          const exp = Number(edge.expectancy_r);
+          const isPositive = wr >= 50;
+          if (isPositive) return null;
+          return (
+            <div className="alert alert-warning text-xs py-2 px-3 mb-3">
+              <strong>⚠️ Regime edge caution:</strong> This signal is in a regime with negative historical edge
+              ({sweepRow?.regime}: {wr.toFixed(1)}% WR, {exp >= 0 ? "+" : ""}{exp.toFixed(2)}R over {edge.n} episodes).
+              Consider reducing size or skipping.
+            </div>
+          );
+        })()}
         <p><strong>Hover each brick for full price.</strong></p>
         {marketProxy != null && sweepRow?.entry_price > 0 && (
           <p className="text-xs opacity-70 mb-2 font-mono">
