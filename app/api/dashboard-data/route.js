@@ -255,6 +255,7 @@ export async function GET() {
     paperPositions,
     paperEquity,
     vsEqualSymbol,
+    regimeEdge: regimeEdgeAll,
   } = bundle;
 
   let symbolsData = symbolsAll;
@@ -288,7 +289,7 @@ export async function GET() {
       symbols: symbolsData,
       paperPositions: isPro ? paperPositions : [],
       paperEquity: isPro ? paperEquity : [],
-      regimeEdge: safeData(regimeEdgeRes).filter((r) => planSymbolSet.has(r.symbol)),
+      regimeEdge: (regimeEdgeAll || []).filter((r) => planSymbolSet.has(r.symbol)),
       planSlug,
       isPro,
       isAdmin,
