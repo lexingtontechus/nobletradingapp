@@ -154,12 +154,6 @@ export default function SignalContextCard({
               value={sweepRow.kairos_rank_score.toFixed(3)}
               className={sweepRow.kairos_rank_score >= 0.55 ? "text-success" : "text-warning"}
             />
-            {sweepRow.kairos_event_window && (
-              <Row label="Event Window" value={sweepRow.kairos_event_window} />
-            )}
-            {sweepRow.kairos_transition && (
-              <Row label="Transition" value={sweepRow.kairos_transition} />
-            )}
           </Section>
         )}
 
