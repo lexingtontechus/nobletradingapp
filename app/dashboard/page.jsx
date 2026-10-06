@@ -32,6 +32,8 @@ import { useUser } from "@clerk/nextjs";
 import { TalariaMark } from "../components/talaria-mark";
 import { createClient } from "@/utils/supabase/client";
 import PlatformHealthCard from "../components/platform-health-card";
+import SignalContextCard from "../components/signal-context-card";
+import CalibrationScorecard from "../components/calibration-scorecard";
 
 // -- Floating live-signals widget --
 // Replaces the old toast-per-signal + HotSignalsBanner pair (2026-09-06):
@@ -546,6 +548,8 @@ function brickSizeMatches(a, b) {
 // Keep only bricks from the sweep's live grid. Stale brick_size grids and
 // orphan high brick_index rows sort first by brick_index DESC and would
 // otherwise plot on a different price plane than ENTRY/SL/TP.
+// Also filter by session_date (latest session only) to avoid plotting bricks
+// from a previous day's grid.
 function pickLiveGridBricks(renkoBricks, symbol, sweepRow) {
   const symbolBricks = (renkoBricks || []).filter((b) => b.symbol === symbol);
   if (!sweepRow || !(Number(sweepRow.brick_size) > 0)) {
@@ -553,9 +557,19 @@ function pickLiveGridBricks(renkoBricks, symbol, sweepRow) {
       (a, b) => Number(b.brick_index ?? 0) - Number(a.brick_index ?? 0)
     );
   }
-  const live = symbolBricks.filter((b) =>
-    brickSizeMatches(b.brick_size, sweepRow.brick_size)
+  // Filter by brick_size AND session_date (latest session only)
+  const latestSession = symbolBricks.reduce((max, b) =>
+    b.session_date > max ? b.session_date : max, ""
   );
+  const live = symbolBricks.filter((b) =>
+    brickSizeMatches(b.brick_size, sweepRow.brick_size) &&
+    b.session_date === latestSession
+  );
+  // Fallback: if no bricks match the live grid, show a warning
+  if (live.length === 0) {
+    console.warn(`[Renko] ${symbol}: no bricks on live grid (bs=${sweepRow.brick_size}, session=${latestSession})`);
+    return [];
+  }
   return live.sort((a, b) => Number(b.brick_index ?? 0) - Number(a.brick_index ?? 0));
 }
 
@@ -734,6 +748,16 @@ function RenkoSection({ sweeps, symbolList, selectedSym, onSelect, renkoBricks, 
             {" · "}Entry: {fmtBrickPriceUsd(sweepRow.entry_price)}
             {" · "}Δ {(((marketProxy - sweepRow.entry_price) / sweepRow.entry_price) * 100).toFixed(3)}%
             {" · "}grid bs={fmtBrickSize(sweepRow.brick_size)}
+            {sweepRow.brick_vol_scale != null && (
+              <span className="text-warning">
+                {" · "}ATR scale: {sweepRow.brick_vol_scale.toFixed(4)}
+              </span>
+            )}
+            {sweepRow.vol_ratio != null && (
+              <span className="opacity-60">
+                {" · "}vol_ratio: {sweepRow.vol_ratio.toFixed(3)}
+              </span>
+            )}
           </p>
         )}
         {/* Symbol picker buttons */}
@@ -2746,6 +2770,9 @@ export default function DashboardPage() {
   const [kellyRows, setKellyRows] = useState([]);
   const [health, setHealth] = useState(null);
   const [paperEquity, setPaperEquity] = useState([]);
+  const [deadlineTiers, setDeadlineTiers] = useState([]);
+  const [geometryRisk, setGeometryRisk] = useState([]);
+  const [kairosPivots, setKairosPivots] = useState([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2822,6 +2849,9 @@ export default function DashboardPage() {
           })
           .catch(() => {});
         setPaperEquity(j.paperEquity ?? []);
+        setDeadlineTiers(j.deadlineTiers ?? []);
+        setGeometryRisk(j.geometryRisk ?? []);
+        setKairosPivots(j.kairosPivots ?? []);
         // Seed liveSignals from the initial fetch too — otherwise a symbol
         // that qualified before this page load (and hasn't had a fresh
         // Realtime broadcast since) never appears in FloatingSignalsWidget
@@ -3089,6 +3119,12 @@ export default function DashboardPage() {
           renkoBricks={renkoBricks}
           regimeEdge={regimeEdge}
         />
+        <SignalContextCard
+          sweepRow={selectedSweepRow}
+          deadlineTiers={deadlineTiers}
+          geometryRisk={geometryRisk}
+          kairosPivots={kairosPivots}
+        />
         <MarkovSection sweeps={mergedSweeps} selectedSym={selectedSym || resolvedSymbolList[0]} renkoBricks={renkoBricks} />
 
         {/* EV / P_win / TimesFM forecast card */}
@@ -3166,6 +3202,7 @@ export default function DashboardPage() {
             {/* Calibration bias (7d) */}
             <CalibrationConfidenceBoard rows={calibrationBoard} outcomeBySide={outcomeBySide} />
             <CalibrationTable rows={calibration} />
+            <CalibrationScorecard calibration={calibration} calibrationBoard={calibrationBoard} />
 
             {/* Paper vs equal-weight (Precision Pro only) */}
             {isPro && <VsEqualWeightTable rows={vsEqual} alignedRows={vsEqualAligned} />}

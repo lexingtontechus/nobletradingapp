@@ -101,6 +101,9 @@ async function loadCachedBundle() {
     paperEquity: arr(p.paperEquity),
     vsEqualSymbol: arr(p.vsEqualSymbol),
     regimeEdge: arr(p.regimeEdge),
+    deadlineTiers: arr(p.deadlineTiers),
+    geometryRisk: arr(p.geometryRisk),
+    kairosPivots: arr(p.kairosPivots),
     health: p.health ?? null,
     refreshed_at: data.refreshed_at,
   };
@@ -127,6 +130,9 @@ async function loadLiveBundle() {
     paperEquityRes,
     vsEqualSymbolRes,
     regimeEdgeRes,
+    deadlineTiersRes,
+    geometryRiskRes,
+    kairosPivotsRes,
   ] = await Promise.all([
     supabase.from("v_talaria_latest_signals").select("*"),
     supabase.from("v_talaria_signal_health").select("*"),
@@ -147,6 +153,9 @@ async function loadLiveBundle() {
     supabase.from("v_paper_equity").select("*"),
     supabase.from("v_paper_vs_optimized_symbol").select("*"),
     supabase.from("nt_regime_edge").select("*").limit(1000),
+    supabase.from("v_talaria_deadline_tiers").select("*"),
+    supabase.from("v_talaria_geometry_risk").select("*"),
+    supabase.from("v_talaria_kairos_pivots").select("*"),
   ]);
 
   return {
@@ -164,6 +173,9 @@ async function loadLiveBundle() {
     paperEquity: safeData(paperEquityRes),
     vsEqualSymbol: safeData(vsEqualSymbolRes),
     regimeEdge: safeData(regimeEdgeRes),
+    deadlineTiers: safeData(deadlineTiersRes),
+    geometryRisk: safeData(geometryRiskRes),
+    kairosPivots: safeData(kairosPivotsRes),
     health: null,
     refreshed_at: new Date().toISOString(),
   };
