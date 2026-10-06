@@ -44,11 +44,9 @@ SELECT
   l.base_brick_size,
   l.brick_vol_scale,
   l.vol_ratio,
-  -- Kairos rank fields (migration 183)
+  -- Kairos rank fields (migration 183 — only these exist on nt_signal_sim)
   sim.kairos_rank_score,
-  sim.kairos_rank_gate_shadow,
-  sim.kairos_event_window,
-  sim.kairos_transition
+  sim.kairos_rank_gate_shadow
 FROM public.v_talaria_symbols sym
 CROSS JOIN LATERAL (
   SELECT
@@ -71,8 +69,7 @@ LEFT JOIN LATERAL (
   LIMIT 1
 ) m ON true
 LEFT JOIN LATERAL (
-  SELECT ns.kairos_rank_score, ns.kairos_rank_gate_shadow,
-         ns.kairos_event_window, ns.kairos_transition
+  SELECT ns.kairos_rank_score, ns.kairos_rank_gate_shadow
   FROM public.nt_signal_sim ns
   WHERE ns.symbol = sym.symbol
     AND ns.kairos_rank_score IS NOT NULL
