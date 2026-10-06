@@ -559,7 +559,7 @@ function pickLiveGridBricks(renkoBricks, symbol, sweepRow) {
   return live.sort((a, b) => Number(b.brick_index ?? 0) - Number(a.brick_index ?? 0));
 }
 
-function RenkoSection({ sweeps, symbolList, selectedSym, onSelect, renkoBricks }) {
+function RenkoSection({ sweeps, symbolList, selectedSym, onSelect, renkoBricks, regimeEdge }) {
   const activeSym = selectedSym || symbolList[0] || "";
   const sweepRow = sweeps.find((s) => s.symbol === activeSym);
   // Use real renko bricks from v_talaria_renko on the SAME brick_size grid as
@@ -680,6 +680,26 @@ function RenkoSection({ sweeps, symbolList, selectedSym, onSelect, renkoBricks }
               {sigDirection === "sell" ? "SHORT · SELL" : "LONG · BUY"}
             </span>
           )}
+          {(() => {
+            const edge = (regimeEdge || []).find(
+              (e) => e.symbol === activeSym && e.signal === (sigDirection || "").toLowerCase() && e.regime === sweepRow?.regime
+            );
+            if (!edge) return null;
+            const wr = Number(edge.win_rate) * 100;
+            const exp = Number(edge.expectancy_r);
+            const isPositive = wr >= 50;
+            return (
+              <span
+                className={
+                  "badge font-mono font-semibold " +
+                  (isPositive ? "badge-success" : "badge-error")
+                }
+                title={`Regime edge: ${wr.toFixed(1)}% WR, ${exp >= 0 ? "+" : ""}${exp.toFixed(2)}R over ${edge.n} episodes`}
+              >
+                {isPositive ? "✅" : "❌"} {wr.toFixed(0)}% · {exp >= 0 ? "+" : ""}${exp.toFixed(2)}R
+              </span>
+            );
+          })()}
         </div>
         <p className="text-xs opacity-60 mb-3">
           Each block is one fixed price step ({sweepRow ? fmtBrickSize(sweepRow.brick_size) : "n/a"}).
@@ -2705,6 +2725,7 @@ export default function DashboardPage() {
   const [vsEqualAligned, setVsEqualAligned] = useState([]);
   const [portfolioStats, setPortfolioStats] = useState(null);
   const [renkoBricks, setRenkoBricks] = useState([]);
+  const [regimeEdge, setRegimeEdge] = useState([]);
   const [kellyRows, setKellyRows] = useState([]);
   const [health, setHealth] = useState(null);
   const [paperEquity, setPaperEquity] = useState([]);
@@ -2767,14 +2788,15 @@ export default function DashboardPage() {
         if (cancelled || !j) return;
         setSweeps(j.sweeps ?? []);
         setSymbols(j.symbols ?? []);
+        setRenkoBricks(j.renkoBricks ?? []);
         setSignalHealth(j.signalHealth ?? []);
+        setRegimeEdge(j.regimeEdge ?? []);
         setCalibration(j.calibration ?? []);
         setCalibrationBoard(j.calibrationBoard ?? []);
         setOutcomeBySide(j.outcomeBySide ?? []);
         setVsEqual(j.vsEqual ?? []);
         setVsEqualAligned(j.vsEqualAligned ?? []);
         setPortfolioStats(j.portfolioStats ?? null);
-        setRenkoBricks(j.renkoBricks ?? []);
         setKellyRows(j.kelly ?? []);
         fetch("/api/platform-health")
           .then((r) => (r.ok ? r.json() : null))
@@ -2882,6 +2904,7 @@ export default function DashboardPage() {
               setRenkoBricks(j.renkoBricks ?? []);
         setKellyRows(j.kelly ?? []);
               setSignalHealth(j.signalHealth ?? []);
+              setRegimeEdge(j.regimeEdge ?? []);
               setCalibration(j.calibration ?? []);
               setCalibrationBoard(j.calibrationBoard ?? []);
               setOutcomeBySide(j.outcomeBySide ?? []);
@@ -3047,6 +3070,7 @@ export default function DashboardPage() {
           selectedSym={selectedSym || resolvedSymbolList[0]}
           onSelect={setSelectedSym}
           renkoBricks={renkoBricks}
+          regimeEdge={regimeEdge}
         />
         <MarkovSection sweeps={mergedSweeps} selectedSym={selectedSym || resolvedSymbolList[0]} renkoBricks={renkoBricks} />
 

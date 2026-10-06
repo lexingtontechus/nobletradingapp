@@ -74,6 +74,7 @@ function emptyBundle() {
     symbols: [],
     paperPositions: [],
     paperEquity: [],
+    regimeEdge: [],
   };
 }
 
@@ -99,6 +100,7 @@ async function loadCachedBundle() {
     paperPositions: arr(p.paperPositions),
     paperEquity: arr(p.paperEquity),
     vsEqualSymbol: arr(p.vsEqualSymbol),
+    regimeEdge: arr(p.regimeEdge),
     health: p.health ?? null,
     refreshed_at: data.refreshed_at,
   };
@@ -124,6 +126,7 @@ async function loadLiveBundle() {
     paperPositionsRes,
     paperEquityRes,
     vsEqualSymbolRes,
+    regimeEdgeRes,
   ] = await Promise.all([
     supabase.from("v_talaria_latest_signals").select("*"),
     supabase.from("v_talaria_signal_health").select("*"),
@@ -143,6 +146,7 @@ async function loadLiveBundle() {
     supabase.from("v_paper_positions").select("*").limit(200),
     supabase.from("v_paper_equity").select("*"),
     supabase.from("v_paper_vs_optimized_symbol").select("*"),
+    supabase.from("nt_regime_edge").select("*").limit(1000),
   ]);
 
   return {
@@ -159,6 +163,7 @@ async function loadLiveBundle() {
     paperPositions: safeData(paperPositionsRes),
     paperEquity: safeData(paperEquityRes),
     vsEqualSymbol: safeData(vsEqualSymbolRes),
+    regimeEdge: safeData(regimeEdgeRes),
     health: null,
     refreshed_at: new Date().toISOString(),
   };
@@ -283,6 +288,7 @@ export async function GET() {
       symbols: symbolsData,
       paperPositions: isPro ? paperPositions : [],
       paperEquity: isPro ? paperEquity : [],
+      regimeEdge: safeData(regimeEdgeRes).filter((r) => planSymbolSet.has(r.symbol)),
       planSlug,
       isPro,
       isAdmin,
