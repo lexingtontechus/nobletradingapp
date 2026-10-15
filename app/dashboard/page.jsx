@@ -32,7 +32,6 @@ import { useUser } from "@clerk/nextjs";
 import { TalariaMark } from "../components/talaria-mark";
 import { createClient } from "@/utils/supabase/client";
 import PlatformHealthCard from "../components/platform-health-card";
-import SignalContextCard from "../components/signal-context-card";
 import CalibrationScorecard from "../components/calibration-scorecard";
 
 // -- Floating live-signals widget --
@@ -927,6 +926,35 @@ function RenkoSection({ sweeps, symbolList, selectedSym, onSelect, renkoBricks, 
           </div>
         )}
 
+        {/* Regime / vol / brick-size / freshness info row */}
+        {sweepRow && (
+          <div className="mt-3 text-xs">
+            <div className="flex items-center gap-3 flex-wrap">
+              {sweepRow.regime && (
+                <span className="badge badge-ghost font-mono" title="Current regime">
+                  {fmtRegime(sweepRow.regime)}
+                </span>
+              )}
+              {sweepRow.vol_ratio != null && (
+                <span className="font-mono opacity-70" title="Volatility ratio">
+                  vol_ratio: {sweepRow.vol_ratio.toFixed(3)}
+                </span>
+              )}
+              <span className="font-mono opacity-70" title="Brick size (ATR-scaled)">
+                brick: {fmtBrickSize(sweepRow.brick_size)}
+              </span>
+              {sweepRow.kairos_rank_score != null && (
+                <span
+                  className={"font-mono " + (sweepRow.kairos_rank_score >= 0.55 ? "text-success" : "text-warning")}
+                  title="Kairos rank score (regime freshness)"
+                >
+                  rank: {sweepRow.kairos_rank_score.toFixed(3)}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
         <p className="text-xs opacity-50 mt-2">
           Levels: entry / stop / target from the latest signal · always 10 steps on the live grid
         </p>
@@ -1629,7 +1657,7 @@ function CalibrationTable({ rows }) {
           Symbol-level bias over 7 days (episode-counted). OVERCONFIDENT = stated
           confidence higher than delivered (be cautious). UNDERCONFIDENT = wins more
           than predicted. Near 0 = honest. This is not the L1 product bar — see
-          “L1 calibration confidence” above for side-split, tightened status.
+          “L1 calibration confidence” below for side-split, tightened status.
           <span className="font-mono">p_win_dir</span> is the bracket probability
           (live since 2026-10-03). <span className="font-mono">p_win_bracket</span> is deprecated.
         </p>
@@ -1832,6 +1860,48 @@ function VsEqualWeightTable({ rows, alignedRows }) {
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PaperEquityCard({ paperEquity, paperPositions }) {
+  const equity = paperEquity && paperEquity.length > 0
+    ? Number(paperEquity[0].cumulative_pnl)
+    : null;
+  const openPositions = (paperPositions || []).filter((p) => p.status === "open");
+  const closedPositions = (paperPositions || []).filter((p) => p.status === "closed" || p.status === "expired");
+  const wins = closedPositions.filter((p) => Number(p.realized_pnl) > 0).length;
+  const winRate = closedPositions.length > 0 ? (wins / closedPositions.length) * 100 : null;
+  const openNotional = openPositions.reduce((sum, p) => sum + Number(p.size_notional || 0), 0);
+
+  return (
+    <div className="card bg-base-100 shadow border border-base-300 mb-6">
+      <div className="card-body">
+        <h3 className="card-title text-lg">Paper equity — Precision Pro</h3>
+        <p className="text-xs opacity-60 mb-3">
+          Simulated trade book — no real money. Daily equity curve, realized
+          PnL, and open positions.
+        </p>
+        <div className="grid gap-4 md:grid-cols-3">
+          <StatCard
+            title="Paper equity"
+            value={equity != null ? "$" + equity.toFixed(2) : "—"}
+            sub="cumulative PnL"
+            tone={equity != null && equity >= 0 ? "pos" : "neg"}
+          />
+          <StatCard
+            title="Open positions"
+            value={String(openPositions.length)}
+            sub={openNotional > 0 ? "$" + openNotional.toFixed(2) + " notional" : "no open positions"}
+          />
+          <StatCard
+            title="Win rate"
+            value={winRate != null ? winRate.toFixed(1) + "%" : "—"}
+            sub={closedPositions.length > 0 ? closedPositions.length + " closed trades" : "no closed trades"}
+            tone={winRate != null && winRate >= 50 ? "pos" : "neg"}
+          />
         </div>
       </div>
     </div>
@@ -2571,7 +2641,7 @@ function llmProviderLabel(p) {
   return LLM_PROVIDER_LABELS[String(p).toLowerCase()] || String(p);
 }
 
-function EodReportView() {
+function EodReportView({ trackedSymbols }) {
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -2596,6 +2666,15 @@ function EodReportView() {
   const stats = report?.stats;
   const statusToneClass = (status) =>
     status === "OVERCONFIDENT" ? "badge-warning" : status === "CALIBRATED" ? "badge-success" : "badge-ghost";
+
+  // Tracked universe (the calibration snapshot the report counts) vs the symbols
+  // that actually had activity. A symbol can be tracked yet absent from
+  // per_symbol simply because it issued no new qualified signal AND had no
+  // qualified resolution that day (e.g. AAPL after its p_win fell below the
+  // gate). Without this, it silently vanishes with no explanation.
+  const trackedList = [...new Set((trackedSymbols || []).filter(Boolean))].sort();
+  const activeSymbols = new Set((report?.per_symbol || []).map((s) => s.symbol));
+  const noActivity = trackedList.filter((s) => !activeSymbols.has(s));
 
   return (
     <div className="card bg-base-100 shadow border border-base-300 mb-6">
@@ -2706,6 +2785,28 @@ function EodReportView() {
                 <p className="text-xs opacity-50">No qualified signal activity today.</p>
               )}
             </div>
+
+            {/* Tracked symbols with nothing to report today. */}
+            {noActivity.length > 0 && (
+              <div className="mt-4">
+                <h4 className="text-sm font-semibold mb-2">
+                  No qualified activity — {noActivity.length} of{" "}
+                  {stats.n_symbols_tracked ?? trackedList.length} tracked
+                </h4>
+                <p className="text-xs opacity-60 mb-2">
+                  Tracked, but issued no new qualified signal and had no qualified
+                  resolution on this day, so there is nothing to report. They are
+                  still counted in the calibration snapshot above.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {noActivity.map((s) => (
+                    <span key={s} className="badge badge-ghost badge-sm font-mono">
+                      {s}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -2770,9 +2871,7 @@ export default function DashboardPage() {
   const [kellyRows, setKellyRows] = useState([]);
   const [health, setHealth] = useState(null);
   const [paperEquity, setPaperEquity] = useState([]);
-  const [deadlineTiers, setDeadlineTiers] = useState([]);
-  const [geometryRisk, setGeometryRisk] = useState([]);
-  const [kairosPivots, setKairosPivots] = useState([]);
+  const [paperPositions, setPaperPositions] = useState([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2849,9 +2948,7 @@ export default function DashboardPage() {
           })
           .catch(() => {});
         setPaperEquity(j.paperEquity ?? []);
-        setDeadlineTiers(j.deadlineTiers ?? []);
-        setGeometryRisk(j.geometryRisk ?? []);
-        setKairosPivots(j.kairosPivots ?? []);
+        setPaperPositions(j.paperPositions ?? []);
         // Seed liveSignals from the initial fetch too — otherwise a symbol
         // that qualified before this page load (and hasn't had a fresh
         // Realtime broadcast since) never appears in FloatingSignalsWidget
@@ -3118,14 +3215,7 @@ export default function DashboardPage() {
           onSelect={setSelectedSym}
           renkoBricks={renkoBricks}
           regimeEdge={regimeEdge}
-        />
-        <SignalContextCard
-          sweepRow={selectedSweepRow}
-          deadlineTiers={deadlineTiers}
-          geometryRisk={geometryRisk}
-          kairosPivots={kairosPivots}
-        />
-        <MarkovSection sweeps={mergedSweeps} selectedSym={selectedSym || resolvedSymbolList[0]} renkoBricks={renkoBricks} />
+        /><MarkovSection sweeps={mergedSweeps} selectedSym={selectedSym || resolvedSymbolList[0]} renkoBricks={renkoBricks} />
 
         {/* EV / P_win / TimesFM forecast card */}
         <div className="card bg-base-100 shadow border border-base-300 mb-6">
@@ -3169,55 +3259,59 @@ export default function DashboardPage() {
           </Fragment>
         )}
 
-        {/* Analysis tab content */}
+        {/* Analysis tab content — ordered by tier: actionable → trust → detail */}
         {activeTab === "analysis" && (
           <Fragment>
+            {/* ── Simulated signal quality (actionable) ── */}
+            <h3 className="text-sm font-semibold uppercase opacity-70 mb-2">Signal quality (simulated)</h3>
+
             {/* RANK board — capital prioritization (Kairos) */}
             <SignalRankingBoard rows={mergedSweeps} />
 
             {/* Kelly by symbol (grouped by asset class, sorted) */}
             <KellyTable sweeps={mergedSweeps} kelly={kellyRows} symbolList={resolvedSymbolList} symbolRows={symbols} />
 
-            {/* Paper portfolio (Precision Pro only) */}
-            {isPro && (
-              <div className="card bg-base-100 shadow border border-base-300 mb-6">
-                <div className="card-body">
-                  <h3 className="card-title text-lg">Paper portfolio — Precision Pro</h3>
-                  <p className="text-xs opacity-60 mb-3">
-                    Simulated trade book — no real money. Daily equity curve, realized
-                    PnL, and risk-adjusted tear-sheet.
-                  </p>
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <StatCard title="Paper equity" value="$1,127.44" sub="cumulative PnL" tone="pos" />
-                    <StatCard title="Open positions" value="3" sub="12.5% of equity" />
-                    <StatCard title="Win rate" value="61.1%" sub="18 trades" tone="pos" />
-                  </div>
-                </div>
-              </div>
-            )}
+            {/* ── Real calibration outcomes (trust) ── */}
+            <h3 className="text-sm font-semibold uppercase opacity-70 mb-2 mt-6">Calibration (real outcomes)</h3>
+
+            {/* Recency-first: aggregate verdict → 7d recent detail → L1 28d
+                canonical bar. CalibrationTable's help text points DOWN to the
+                L1 board (rendered after it). */}
+            <CalibrationScorecard calibration={calibration} platformHealth={health?.user} />
+            <CalibrationTable rows={calibration} />
+            <CalibrationConfidenceBoard rows={calibrationBoard} outcomeBySide={outcomeBySide} />
+
+            {/* ── Simulated per-symbol detail (demoted) ── */}
+            <h3 className="text-sm font-semibold uppercase opacity-70 mb-2 mt-6">Signal detail (simulated)</h3>
 
             {/* Signal health scoreboard (sorted by symbol) */}
             <SignalHealthTable rows={signalHealth} />
-
-            {/* Calibration bias (7d) */}
-            <CalibrationConfidenceBoard rows={calibrationBoard} outcomeBySide={outcomeBySide} />
-            <CalibrationTable rows={calibration} />
-            <CalibrationScorecard calibration={calibration} calibrationBoard={calibrationBoard} />
-
-            {/* Paper vs equal-weight (Precision Pro only) */}
-            {isPro && <VsEqualWeightTable rows={vsEqual} alignedRows={vsEqualAligned} />}
-
-            {/* Portfolio stats (Precision Pro only) */}
-            {isPro && portfolioStats && <PortfolioStatsCard stats={portfolioStats} />}
           </Fragment>
         )}
+        {/* Portfolio tab content */}
         {activeTab === "portfolio" && (
-          isPro
-            ? <SignalRiskCard />
-            : <PlanGateCard
-                title="Signal risk overview"
-                body="Upgrade to see regime alignment, Kelly-weighted concentration, and concurrent-signal agreement across your plan's symbols."
+          <Fragment>
+            {isPro ? (
+              <>
+                {/* Paper equity summary (real data from v_paper_equity + v_paper_positions) */}
+                <PaperEquityCard paperEquity={paperEquity} paperPositions={paperPositions} />
+
+                {/* Portfolio tear-sheet (Sharpe/Sortino/Calmar/MaxDD/PF/PnL) */}
+                {portfolioStats && <PortfolioStatsCard stats={portfolioStats} />}
+
+                {/* Paper vs equal-weight comparison */}
+                <VsEqualWeightTable rows={vsEqual} alignedRows={vsEqualAligned} />
+
+                {/* Signal risk overview (correlation, agreement, Kelly concentration) */}
+                <SignalRiskCard />
+              </>
+            ) : (
+              <PlanGateCard
+                title="Portfolio analytics"
+                body="Upgrade to see paper equity, portfolio tear-sheet, paper vs equal-weight comparison, and signal risk overview."
               />
+            )}
+          </Fragment>
         )}
         {activeTab === "health" && (
           <Fragment>
@@ -3228,7 +3322,9 @@ export default function DashboardPage() {
             <PlatformHealthCard isAdmin={isAdmin} />
           </Fragment>
         )}
-        {activeTab === "eod" && <EodReportView />}
+        {activeTab === "eod" && (
+          <EodReportView trackedSymbols={[...new Set((calibration || []).map((r) => r.symbol))]} />
+        )}
 
         <FloatingSignalsWidget signals={liveSignals} />
       </div>
