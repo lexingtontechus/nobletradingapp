@@ -144,7 +144,9 @@ export default function PlatformHealthCard({ isAdmin = false }) {
               <div className="stat py-2">
                 <div className="stat-title text-xs">Settled (7d)</div>
                 <div className="stat-value text-xl">{u?.settled_7d ?? "—"}</div>
-                <div className="stat-desc">W or L (not expired)</div>
+                <div className="stat-desc" title="Qualified signals that resolved to W or L — subset of qualified alerts">
+                  qualified W/L · subset of alerts
+                </div>
               </div>
               <div className="stat py-2">
                 <div className="stat-title text-xs">Vs odds</div>
