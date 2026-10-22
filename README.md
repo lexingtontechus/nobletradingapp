@@ -548,7 +548,7 @@ nobletradingapp/
 │       ├── _server.js
 │       └── client.js
 ├── public/                           # Static assets
-├── proxy.jsx                         # Edge middleware (Clerk auth gate)
+├── proxy.js                          # Edge middleware (Clerk auth gate)
 ├── .env.example                      # All env vars documented
 ├── components.json                   # shadcn/ui config
 ├── next.config.mjs
@@ -657,7 +657,8 @@ row on every call. Hashes the presented token (SHA-256), looks it up in
 derives `sub_status` from the user's most recent subscription. CORS is
 permissive (`Access-Control-Allow-Origin: *`) because the caller is a desktop
 client (Origin may be null / `hermes://`). No env secrets to set — Supabase
-auto-injects `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`.
+auto-injects `SUPABASE_URL` + `SUPABASE_SECRET_KEYS` (a JSON object keyed by
+key name) + `SUPABASE_PUBLISHABLE_KEYS`.
 
 ---
 
@@ -713,7 +714,7 @@ See `.env.example` for the full annotated list. Summary:
 | Service       | Variables                                                                                              | Where              |
 | ------------- | ------------------------------------------------------------------------------------------------------ | ------------------ |
 | Clerk         | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_WEBHOOK_SECRET`                        | next.js            |
-| Supabase      | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`   | next.js + supabase |
+| Supabase      | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`   | next.js + supabase |
 | Helio         | `NEXT_PUBLIC_HELIO_NETWORK` (optional — paylink ids now come from the DB),                             | next.js + supabase |
 |               | `HELIO_API_KEY`, `HELIO_API_TOKEN`, `HELIO_API_BASE_URL`, `HELIO_WEBHOOK_SHARED_TOKEN`                 | supabase           |
 | AgentMail     | `AGENTMAIL_API_KEY`, `AGENTMAIL_INBOX_ID`, `AGENTMAIL_WEBHOOK_SECRET`,                                 | supabase           |

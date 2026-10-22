@@ -36,13 +36,18 @@
 //   REMINDER_SUCCESS_URL        — where to send the user after they pay
 //   REMINDER_CANCEL_URL         — cancel redirect
 //   SUPABASE_URL                — auto-injected
-//   SUPABASE_SERVICE_ROLE_KEY   — auto-injected
+//   SUPABASE_SECRET_KEYS   — auto-injected
 // =============================================================================
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+// Supabase's new secret key env var is a JSON object keyed by key name
+const SUPABASE_SECRET_KEYS = JSON.parse(
+  Deno.env.get("SUPABASE_SECRET_KEYS") ?? "{}"
+);
+const SUPABASE_SERVICE_KEY =
+  (SUPABASE_SECRET_KEYS.kairos ?? Object.values(SUPABASE_SECRET_KEYS)[0])!;
 const HELIO_API_KEY = Deno.env.get("HELIO_API_KEY")!;
 const HELIO_API_TOKEN = Deno.env.get("HELIO_API_TOKEN")!;
 const HELIO_API_BASE = Deno.env.get("HELIO_API_BASE_URL") ?? "https://api.hel.io";

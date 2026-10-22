@@ -14,19 +14,39 @@
 
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { auth: { persistSession: false } }
-);
+let supabase = null;
+
+/**
+ * Built lazily. A module-scope client crashed `next build` during page-data
+ * collection whenever the server key was absent — a local `.env.local`
+ * carries SUPABASE_SECRET_KEY (the old service-role env name is deprecated
+ * and is NOT read here; there is no fallback), and Supabase
+ * throws "supabaseKey is required" at import time. Same guard the API routes
+ * use: absent config becomes a null client the caller checks, not a crash.
+ */
+function getClient() {
+  if (supabase) return supabase;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SECRET_KEY;
+  if (!url || !key) {
+    console.error(
+      "[portfolio-cache] Missing env: NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SECRET_KEY"
+    );
+    return null;
+  }
+  supabase = createClient(url, key, { auth: { persistSession: false } });
+  return supabase;
+}
 
 export function getSupabase() {
-  return supabase;
+  return getClient();
 }
 
 /** Read the cached analytics row for a plan from its 1:1 cache view. */
 export async function readAnalyticsCache(view, planSlug) {
-  const { data, error } = await supabase
+  const client = getClient();
+  if (!client) return null;
+  const { data, error } = await client
     .from(view)
     .select("*")
     .eq("plan_slug", planSlug)

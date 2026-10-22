@@ -27,7 +27,7 @@ subscribing to `realtime:signals.<plan_slug>` topics
 
 > **Repo note**: The webapp already provides a client at `@/utils/supabase/client.js`
 > exporting `createClient()` via `createBrowserClient` from `@supabase/ssr`
-> with `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_ANON_KEY`.
+> with `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
 > Use that, not `createClient` from `@supabase/supabase-js`.
 
 ```jsx
@@ -74,8 +74,8 @@ function DashboardRealtime({ planSlug, isActive }) {
 ## Key Constraints
 
 - `@supabase/supabase-js` v2 + `@supabase/ssr` v0.12 are already in `package.json` — no new deps
-- The webapp already has a client-side Supabase client at `@/utils/supabase/client.js` using `createBrowserClient` from `@supabase/ssr` with `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_ANON_KEY` (**not** `NEXT_PUBLIC_SUPABASE_ANON_KEY` — the env var is named `PUBLISHABLE` and is already defined in `.env.example`)
-- `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_ANON_KEY` are both already client-side safe
+- The webapp already has a client-side Supabase client at `@/utils/supabase/client.js` using `createBrowserClient` from `@supabase/ssr` with `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (**not** `NEXT_PUBLIC_SUPABASE_ANON_KEY` — the env var is named `PUBLISHABLE` and is already defined in `.env.example`)
+- `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` are both already client-side safe
 - The webapp's existing `api/subscription-status/route.js:21` has a TODO: "Future: add Supabase Realtime subscription on the client to push updates" — this IS that future
 - If using table-change Realtime, confirm RLS policy on the broadcasted table allows read access for the authenticated user's plan scope
 - Toast library: use daisyUI `toast` + `alert` classes (no shadcn/ui / react-hot-toast needed)
@@ -110,7 +110,7 @@ If the backend publishes via `supabase.from('nt_sweep_result').insert(...)` (tab
 Do NOT use `supabase.from("realtime:signals." + slug).broadcast(...)` as a poll or REST fallback — `.from()` does not support `.broadcast()`. This throws a runtime error because `.from()` expects a table/view name, not a Realtime channel topic. Use `.channel(topic)` for Realtime subscriptions, or `fetch("/api/dashboard-data")` with `setInterval` for REST polling.
 
 ### Anon key exposure
-`NEXT_PUBLIC_SUPABASE_ANON_KEY` is safe to expose because RLS policies restrict what each user can read. But confirm the anon key has `SELECT` rights on the relevant views/tables gated by `auth.uid()` → `users.clerk_user_id`.
+`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` is safe to expose because RLS policies restrict what each user can read. But confirm the publishable key has `SELECT` rights on the relevant views/tables gated by `auth.uid()` → `users.clerk_user_id`.
 
 ### WebSocket disconnection handling
 Desktop plugins rarely disconnect (always-on tray app). Browser tabs can be backgrounded/throttled. Implement `.on('stateChan','closed')` or use the connection state to switch to polling fallback.

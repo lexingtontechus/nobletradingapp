@@ -20,11 +20,19 @@ import { TalariaSignalCopyPanel } from "@/app/components/talaria-signal-copy-pan
 import { SubscriptionStatusBadge } from "@/app/components/subscription-status-badge";
 
 // Service-role client (server-only). Bypasses RLS.
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { auth: { persistSession: false } }
-);
+// Lazy singleton: createClient throws at module load when env is absent, which
+// takes down the build at import time. Absent config becomes a null client the
+// page turns into a redirect instead.
+let _client = null;
+function getClient() {
+  if (!_client) {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.SUPABASE_SECRET_KEY;
+    if (!url || !key) return null;
+    _client = createClient(url, key, { auth: { persistSession: false } });
+  }
+  return _client;
+}
 
 function formatDate(iso) {
   if (!iso) return "—";
@@ -41,6 +49,11 @@ export default async function WelcomePage() {
   const { userId } = await auth();
   if (!userId) {
     redirect("/sign-in");
+  }
+
+  const supabase = getClient();
+  if (!supabase) {
+    redirect("/portal");
   }
 
   // 2. Resolve the local user row (same upsert-first-timer pattern as
@@ -78,7 +91,15 @@ export default async function WelcomePage() {
     subscription &&
     (subscription.status === "active" || subscription.status === "grace");
 
-  if (!isActive) {
+  // ADMIN IS THE TOP OF THE GATE — full access regardless of subscription
+  // state. This page renders the plan title/price off the subscription row, so
+  // an admin with no current sub has nothing to onboard from here: send them to
+  // the dashboard instead of bouncing them to the plan picker (a paying-
+  // customer surface). Without this, any admin landing here is redirected to
+  // /portal — the exact symptom of the edge-lab bounce.
+  if (localUser.role === "admin") {
+    if (!isActive) redirect("/dashboard");
+  } else if (!isActive) {
     redirect("/portal");
   }
 

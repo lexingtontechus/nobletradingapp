@@ -34,15 +34,31 @@ import { createClient } from "@supabase/supabase-js"
 import crypto from "node:crypto"
 
 // Service-role client (server-only). Bypasses RLS.
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { auth: { persistSession: false } }
-)
+// Lazy singleton: createClient throws at module load when env is absent,
+// which takes down every route in the app at import time. Absent config
+// becomes a null client the handler turns into a clean 503 instead.
+let _client = null;
+function getClient() {
+  if (!_client) {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.SUPABASE_SECRET_KEY;
+    if (!url || !key) return null;
+    _client = createClient(url, key, { auth: { persistSession: false } });
+  }
+  return _client;
+}
 
 const CLAIM_TTL_DAYS = 30
 
 export async function POST() {
+
+  const supabase = getClient();
+  if (!supabase) {
+    return NextResponse.json(
+      { error: "This endpoint is not configured on this deployment." },
+      { status: 503, headers: { "cache-control": "no-store" } }
+    );
+  }
   // 1. Auth — must be signed in
   const { userId } = await auth()
   if (!userId) {

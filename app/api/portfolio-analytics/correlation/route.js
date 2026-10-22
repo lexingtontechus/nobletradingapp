@@ -45,6 +45,12 @@ export async function GET(request) {
   }
 
   const supabase = getSupabase();
+  if (!supabase) {
+    return NextResponse.json(
+      { error: "Portfolio analytics is not configured on this deployment." },
+      { status: 503 }
+    );
+  }
   const forceRefresh = new URL(request.url).searchParams.get("refresh") === "1";
 
   const { data: localUser } = await supabase

@@ -19,7 +19,7 @@
 //
 // Env vars (auto-injected by Supabase):
 //   SUPABASE_URL                — auto-injected
-//   SUPABASE_SERVICE_ROLE_KEY   — auto-injected (bypasses RLS)
+//   SUPABASE_SECRET_KEYS   — auto-injected (bypasses RLS)
 //   AGENTMAIL_API_KEY           — set via: supabase secrets set AGENTMAIL_API_KEY=am_...
 //   AGENTMAIL_INBOX_ID          — set via: supabase secrets set AGENTMAIL_INBOX_ID=...
 //
@@ -34,7 +34,12 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+// Supabase's new secret key env var is a JSON object keyed by key name
+const SUPABASE_SECRET_KEYS = JSON.parse(
+  Deno.env.get("SUPABASE_SECRET_KEYS") ?? "{}"
+);
+const SUPABASE_SERVICE_KEY =
+  (SUPABASE_SECRET_KEYS.kairos ?? Object.values(SUPABASE_SECRET_KEYS)[0])!;
 const AGENTMAIL_API_KEY = Deno.env.get("AGENTMAIL_API_KEY")!;
 const AGENTMAIL_INBOX_ID = Deno.env.get("AGENTMAIL_INBOX_ID")!;
 

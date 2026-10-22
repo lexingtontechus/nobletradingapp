@@ -23,7 +23,7 @@
 //
 // Env vars (Supabase Dashboard -> Edge Functions -> Secrets; copy the same
 // values as nobletradingapp's Vercel env):
-//   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY   — auto-injected
+//   SUPABASE_URL, SUPABASE_SECRET_KEYS   — auto-injected
 //   INTERNAL_FUNCTION_SECRET                  — shared secret, manual trigger
 //   WEBAPP_BACKEND_API_KEY                    — must match the backend's API_KEY
 //   WEBAPP_BACKEND_URL                        — optional; defaults to Render
@@ -32,7 +32,12 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+// Supabase's new secret key env var is a JSON object keyed by key name
+const SUPABASE_SECRET_KEYS = JSON.parse(
+  Deno.env.get("SUPABASE_SECRET_KEYS") ?? "{}"
+);
+const SUPABASE_SERVICE_KEY =
+  (SUPABASE_SECRET_KEYS.kairos ?? Object.values(SUPABASE_SECRET_KEYS)[0])!;
 const INTERNAL_SECRET = Deno.env.get("INTERNAL_FUNCTION_SECRET") ?? "";
 const WEBAPP_BACKEND_URL =
   Deno.env.get("WEBAPP_BACKEND_URL") || "https://nobletradingapp-backend.onrender.com";

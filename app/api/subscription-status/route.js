@@ -25,14 +25,23 @@ import { NextResponse } from "next/server"
 import { auth, clerkClient } from "@clerk/nextjs/server"
 import { createClient } from "@supabase/supabase-js"
 import { cached } from "@/utils/api-cache"
+import { isCurrentSubscription } from "@/utils/subscription-access"
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { auth: { persistSession: false } }
-)
+// Lazy singleton: createClient throws at module load when env is absent,
+// which takes down every route in the app at import time. Absent config
+// becomes a null client the handler turns into a clean 503 instead.
+let _client = null;
+function getClient() {
+  if (!_client) {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.SUPABASE_SECRET_KEY;
+    if (!url || !key) return null;
+    _client = createClient(url, key, { auth: { persistSession: false } });
+  }
+  return _client;
+}
 
-async function loadSubscriptionState(userId) {
+async function loadSubscriptionState(supabase, userId) {
   // 1. Resolve local user
   const { data: localUser } = await supabase
     .from("users")
@@ -124,13 +133,21 @@ async function loadSubscriptionState(userId) {
 }
 
 export async function GET() {
+
+  const supabase = getClient();
+  if (!supabase) {
+    return NextResponse.json(
+      { error: "This endpoint is not configured on this deployment." },
+      { status: 503, headers: { "cache-control": "no-store" } }
+    );
+  }
   const { userId } = await auth()
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
   const payload = await cached(`sub:${userId}`, 30_000, () =>
-    loadSubscriptionState(userId)
+    loadSubscriptionState(supabase, userId)
   )
 
   if (payload?.error) {
@@ -146,6 +163,10 @@ export async function GET() {
       subscription: payload.subscription,
       payments: payload.payments,
       events: payload.events,
+      // Date-aware access state. `subscription.status` alone is driven only by
+      // Helio ENDED webhooks and can stay "active" long after the period
+      // lapsed (migration 0033's cron repairs the row; this is the guard).
+      isCurrent: isCurrentSubscription(payload.subscription),
     },
     { headers: { "Cache-Control": "private, max-age=15" } }
   )

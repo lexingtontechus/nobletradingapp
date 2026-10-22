@@ -1,4 +1,4 @@
-import { supabase } from "@/utils/supabase/_server";
+import { getClient } from "@/utils/supabase/_server";
 
 // Precision Pro — current-month membership counts by status.
 // Replaces the old `widget_pivot_count_precisionpro` table.
@@ -9,6 +9,11 @@ const currentMonth = date.getMonth() + 1;
 const currentMonthName = date.toLocaleString("default", { month: "long" });
 
 export default async function WidgetCustomersPrecisionPro() {
+
+  const supabase = getClient();
+  if (!supabase) {
+    return <div className="text-error p-4">Error loading widget: Supabase is not configured.</div>;
+  }
   const { data: counts, error: countsError } = await supabase
     .from("v_subscription_counts_by_plan")
     .select("plan_title, active_count, grace_count, expired_count, cancelled_count, pending_count")

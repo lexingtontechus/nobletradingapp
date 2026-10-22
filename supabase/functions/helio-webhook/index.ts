@@ -68,7 +68,7 @@
 //   CLERK_SECRET_KEY            — Clerk backend secret key (sk_...) for metadata sync
 //   INTERNAL_FUNCTION_SECRET    — shared secret for calling redis-credentials-manager
 //   SUPABASE_URL                — auto-injected
-//   SUPABASE_SERVICE_ROLE_KEY   — auto-injected
+//   SUPABASE_SECRET_KEYS   — auto-injected
 // =============================================================================
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -90,7 +90,12 @@ const HELIO_API_BASE = Deno.env.get("HELIO_API_BASE_URL") ?? "https://api.hel.io
 const CLERK_SECRET_KEY = Deno.env.get("CLERK_SECRET_KEY")!;
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+// Supabase's new secret key env var is a JSON object keyed by key name
+const SUPABASE_SECRET_KEYS = JSON.parse(
+  Deno.env.get("SUPABASE_SECRET_KEYS") ?? "{}"
+);
+const SUPABASE_SERVICE_KEY =
+  (SUPABASE_SECRET_KEYS.kairos ?? Object.values(SUPABASE_SECRET_KEYS)[0])!;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
   auth: { persistSession: false },

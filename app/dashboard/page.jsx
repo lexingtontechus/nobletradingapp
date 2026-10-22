@@ -31,6 +31,7 @@ import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import { TalariaMark } from "../components/talaria-mark";
 import { createClient } from "@/utils/supabase/client";
+import { hasSubscriberAccess } from "@/utils/subscription-access";
 import PlatformHealthCard from "../components/platform-health-card";
 import CalibrationScorecard from "../components/calibration-scorecard";
 
@@ -2882,17 +2883,37 @@ export default function DashboardPage() {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const j = await r.json();
         const sub = j?.subscription;
+        const role = j?.user?.role ?? null;
+
+        // ADMIN IS THE TOP OF THE GATE — full access, no subscription required.
+        // Skip the plan-status redirect entirely: an admin must never be
+        // bounced to /welcome because a subscription lapsed or is absent.
+        if (role === "admin") {
+          if (!cancelled) {
+            // /api/dashboard-data returns the admin bundle without needing a
+            // plan, but the data effect below gates on planSlug — use the
+            // admin's own plan when they have one, else the top tier.
+            setPlanSlug(sub?.plans?.slug ?? "precision_pro");
+            setStatusChecked(true);
+          }
+          return;
+        }
+
         if (sub?.plans?.slug) {
           if (!cancelled) setPlanSlug(sub.plans.slug);
-          // If no active plan → redirect to /welcome (onboarding flow).
-          // Flow: signin → dashboard → plan inactive → /welcome → claim token → /dashboard
-          const status = sub?.status ?? null;
-          if (!cancelled && (!status || !["active", "grace", "pending"].includes(status))) {
-            router.replace("/welcome");
+          // If the subscription is not current → redirect to /portal (the plan
+          // picker / re-subscribe surface).
+          // NOT /welcome: that page's own server gate requires an active/grace
+          // subscription, so it always bounces back to /portal — a pointless
+          // extra hop that also broke admins.
+          // Date-aware: `status` alone is driven only by Helio ENDED webhooks
+          // and can stay "active" long after the period lapsed.
+          if (!cancelled && !hasSubscriberAccess(sub)) {
+            router.replace("/portal");
             return;
           }
           // If active → mint claim token for Pro-only view access
-          if (status === "active" || status === "grace") {
+          if (sub.status === "active" || sub.status === "grace") {
             try {
               const cr = await fetch("/api/talaria-claim", { method: "POST" });
               if (cr.ok) {
@@ -3150,6 +3171,9 @@ export default function DashboardPage() {
             <h1 className="text-2xl font-bold text-center">Talaria Dashboard <TalariaMark size={32} /> {planTitle}</h1>
 
           {/* Quick nav — link to the portal for subscription management */}
+            <Link href="/dashboard/edge-lab" className="btn btn-sm btn-outline btn-secondary">
+             Edge Lab
+            </Link>
             <Link href="/portal" className="btn btn-sm btn-outline btn-secondary">
              Portal
             </Link>

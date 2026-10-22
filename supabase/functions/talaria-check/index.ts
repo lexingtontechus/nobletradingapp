@@ -36,13 +36,18 @@
 // =============================================================================
 // Env vars (auto-injected by Supabase — no secrets to set):
 //   SUPABASE_URL                — auto-injected
-//   SUPABASE_SERVICE_ROLE_KEY   — auto-injected (bypasses RLS)
+//   SUPABASE_SECRET_KEYS   — auto-injected (bypasses RLS)
 // =============================================================================
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+// Supabase's new secret key env var is a JSON object keyed by key name
+const SUPABASE_SECRET_KEYS = JSON.parse(
+  Deno.env.get("SUPABASE_SECRET_KEYS") ?? "{}"
+);
+const SUPABASE_SERVICE_KEY =
+  (SUPABASE_SECRET_KEYS.kairos ?? Object.values(SUPABASE_SECRET_KEYS)[0])!;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
   auth: { persistSession: false },
@@ -132,6 +137,18 @@ Deno.serve(async (req: Request) => {
   const subStatus: string = sub?.status ?? "none";
   const chargeable = ["expired", "cancelled", "grace"].includes(subStatus);
 
+  // Date-aware: `status` is driven only by Helio ENDED webhooks, so a lapsed
+  // row can still read "active". Report it as expired — the EA stops trading
+  // on anything not active/grace, and migration 0033's cron repairs the row.
+  const now = Date.now();
+  const periodEnd = sub?.grace_period_end ?? sub?.current_period_end;
+  const lapsed =
+    sub != null &&
+    (sub.status === "active" || sub.status === "grace") &&
+    periodEnd != null &&
+    new Date(periodEnd).getTime() < now;
+  const effectiveStatus: string = lapsed ? "expired" : subStatus;
+
   // 5. Best-effort last_validated_at stamp (never fails the response)
   await supabase
     .from("talaria_claims")
@@ -142,7 +159,7 @@ Deno.serve(async (req: Request) => {
     ok: true,
     plan_slug: claim.plans.slug,
     plan_uuid: claim.plans.id,
-    sub_status: subStatus,
+    sub_status: effectiveStatus,
     period_end: sub?.current_period_end ?? null,
     grace_end: sub?.grace_period_end ?? null,
     // next_charge_url only when the user needs to act on it

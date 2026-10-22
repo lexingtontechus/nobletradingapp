@@ -28,11 +28,19 @@ import CheckoutButton from "../components/checkout"
 
 // Server-side read of plans (anon key is fine — RLS allows public reads of
 // active plans; see the "plans public read" policy in 0001_init.sql).
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_ANON_KEY,
-  { auth: { persistSession: false } }
-)
+// Lazy singleton: createClient throws at module load when env is absent, which
+// takes down the build at import time. Absent config becomes a null client the
+// page turns into a fallback render instead.
+let _client = null;
+function getClient() {
+  if (!_client) {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+    if (!url || !key) return null;
+    _client = createClient(url, key, { auth: { persistSession: false } });
+  }
+  return _client;
+}
 
 // Plan-aware marketing copy, sourced from docs/marketing/*.md. Keyed by a
 // substring of the DB plan title so new plans still render with a sane
@@ -102,6 +110,17 @@ function copyForTitle(title) {
 }
 
 export default async function PricingPage() {
+  const supabase = getClient();
+  if (!supabase) {
+    return (
+      <main className="min-h-screen bg-base-200">
+        <div className="mx-auto max-w-5xl px-4 py-16 text-center">
+          <p className="opacity-70">Pricing is temporarily unavailable.</p>
+        </div>
+      </main>
+    );
+  }
+
   const { data: plans } = await supabase
     .from("plans")
     .select(

@@ -60,18 +60,26 @@
 //   * Plan filtering and qualification run server-side.
 //
 // CORS: permissive (desktop/EA Origin is null or custom). Mirrors talaria-check.
-// Env (auto-injected): SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+// Env (auto-injected): SUPABASE_URL, SUPABASE_SECRET_KEYS
 // =============================================================================
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+// Supabase's new secret key env var is a JSON object keyed by key name
+const SUPABASE_SECRET_KEYS = JSON.parse(
+  Deno.env.get("SUPABASE_SECRET_KEYS") ?? "{}"
+);
+const SUPABASE_SERVICE_KEY =
+  (SUPABASE_SECRET_KEYS.kairos ?? Object.values(SUPABASE_SECRET_KEYS)[0])!;
 // Option A (2026-09-29): anon/publishable key for EA WebSocket → Supabase
 // Realtime (same as desktop plugin). Prefer env; never use service key here.
+// New publishable key env var is also a JSON object keyed by key name.
+const SUPABASE_PUBLISHABLE_KEYS = JSON.parse(
+  Deno.env.get("SUPABASE_PUBLISHABLE_KEYS") ?? "{}"
+);
 const SUPABASE_ANON_KEY =
-  Deno.env.get("SUPABASE_ANON_KEY") ||
-  Deno.env.get("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_ANON_KEY") ||
+  Object.values(SUPABASE_PUBLISHABLE_KEYS)[0] ||
   "sb_publishable_cYfseJa9z0qss0g_Y594wA_lXrWVBsa";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {

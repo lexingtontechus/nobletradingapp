@@ -1,4 +1,4 @@
-import { supabase } from "@/utils/supabase/_server";
+import { getClient } from "@/utils/supabase/_server";
 
 // Summary stat cards: total registered users + total Discord-linked users.
 // Replaces the old `widget_customers_summary` table (which no longer exists).
@@ -6,6 +6,11 @@ import { supabase } from "@/utils/supabase/_server";
 // (admin needs to see ALL users, not just their own — RLS on the user-JWT
 // client would limit to the admin's own row).
 export default async function Customers() {
+
+  const supabase = getClient();
+  if (!supabase) {
+    return <div className="text-error p-4">Error loading widget: Supabase is not configured.</div>;
+  }
   // COUNT(*) is one round-trip; COUNT with a filter is another. Supabase's
   // head:true + count:'exact' lets us fetch just the count, not the rows.
   const [{ count: totalUsers, error: usersError }, { count: discordUsers, error: discordError }] =

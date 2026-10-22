@@ -32,6 +32,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...but the template is the canonical var list that README/AGENTS.md point at
+# ("cp .env.example .env.local"), so it must be version-controlled.
+!.env.example
 
 # vercel
 .vercel

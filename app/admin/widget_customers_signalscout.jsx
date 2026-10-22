@@ -1,4 +1,4 @@
-import { supabase } from "@/utils/supabase/_server";
+import { getClient } from "@/utils/supabase/_server";
 
 // Signal Scout — current-month membership counts by status.
 // Replaces the old `widget_pivot_count_signalscout` table.
@@ -11,6 +11,11 @@ const currentMonth = date.getMonth() + 1;
 const currentMonthName = date.toLocaleString("default", { month: "long" });
 
 export default async function WidgetCustomersSignalScout() {
+
+  const supabase = getClient();
+  if (!supabase) {
+    return <div className="text-error p-4">Error loading widget: Supabase is not configured.</div>;
+  }
   // v_subscription_counts_by_plan gives lifetime counts per plan × status.
   const { data: counts, error: countsError } = await supabase
     .from("v_subscription_counts_by_plan")

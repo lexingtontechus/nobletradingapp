@@ -1,10 +1,15 @@
-import { supabase } from "@/utils/supabase/_server";
+import { getClient } from "@/utils/supabase/_server";
 import { LineChartSignalScout } from "./components/linechart_signalscout";
 
 // Signal Scout — year-to-date monthly revenue area chart.
 // Replaces the old `widget_payments_chart_details` table filtered by title.
 // Now reads from the `v_revenue_summary` view filtered to plan_title.
 export default async function WidgetPaymentsSignalScoutChart() {
+
+  const supabase = getClient();
+  if (!supabase) {
+    return <div className="text-error p-4">Error loading widget: Supabase is not configured.</div>;
+  }
   const currentYear = new Date().getFullYear();
   const yearStart = `${currentYear}-01-01`;
   const yearEnd = `${currentYear + 1}-01-01`;

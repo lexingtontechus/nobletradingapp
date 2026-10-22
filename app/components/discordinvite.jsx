@@ -44,7 +44,7 @@ export default function DiscordInvite() {
       size="lg"
       className="btn rounded-full max-w-[340px] blurple uppercase"
     >
-      <img className="size-8" src="/logoDiscord.svg" />
+      <img className="size-8" src="/logoDiscord.svg" alt="" />
       {isInviteLoading ? (
         <>
           <span className="loading loading-spinner"></span>"Joining"{" "}

@@ -15,11 +15,19 @@ import { createClient } from "@supabase/supabase-js";
 import { roleFromLocalUser, checkRole } from "@/utils/roles";
 import { cached } from "@/utils/api-cache";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { auth: { persistSession: false } }
-);
+// Lazy singleton: createClient throws at module load when env is absent,
+// which takes down every route in the app at import time. Absent config
+// becomes a null client the handler turns into a clean 503 instead.
+let _client = null;
+function getClient() {
+  if (!_client) {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.SUPABASE_SECRET_KEY;
+    if (!url || !key) return null;
+    _client = createClient(url, key, { auth: { persistSession: false } });
+  }
+  return _client;
+}
 
 function round(n, d = 3) {
   if (n === null || n === undefined || Number.isNaN(Number(n))) return null;
@@ -67,7 +75,7 @@ const IMPROVEMENTS = [
   },
 ];
 
-async function loadHealth() {
+async function loadHealth(supabase) {
   return cached("platform-health-row", 60_000, async () => {
     // Prefer the dashboard bundle cache (one tiny row).
     try {
@@ -93,6 +101,14 @@ async function loadHealth() {
 }
 
 export async function GET() {
+
+  const supabase = getClient();
+  if (!supabase) {
+    return NextResponse.json(
+      { error: "This endpoint is not configured on this deployment." },
+      { status: 503, headers: { "cache-control": "no-store" } }
+    );
+  }
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -100,7 +116,7 @@ export async function GET() {
 
   const [localRes, health] = await Promise.all([
     supabase.from("users").select("id, role").eq("clerk_user_id", userId).maybeSingle(),
-    loadHealth(),
+    loadHealth(supabase),
   ]);
   const localUser = localRes?.data;
 

@@ -23,7 +23,7 @@
 //   every 15 minutes. Invoked with X-Internal-Secret or X-Supabase-Cron.
 //
 // Env required:
-//   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+//   SUPABASE_URL, SUPABASE_SECRET_KEYS,
 //   HELIO_API_KEY, HELIO_API_TOKEN, HELIO_API_BASE_URL (api.hel.io | api.dev.hel.io)
 //   CLERK_SECRET_KEY (for metadata sync; missing -> skip sync)
 //   INTERNAL_FUNCTION_SECRET (optional auth gate)
@@ -35,7 +35,12 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 // Env
 // -----------------------------------------------------------------------------
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
-const SUPABASE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+// Supabase's new secret key env var is a JSON object keyed by key name
+const SUPABASE_SECRET_KEYS = JSON.parse(
+  Deno.env.get("SUPABASE_SECRET_KEYS") ?? "{}"
+);
+const SUPABASE_KEY =
+  (SUPABASE_SECRET_KEYS.kairos ?? Object.values(SUPABASE_SECRET_KEYS)[0]) ?? "";
 // Defensive env resolution: the project secrets expose several name variants
 // (HELIO_API_KEY/DEV, HELIO_APIKEY, HELIO_API_BASE vs HELIO_API_BASE_URL).
 // Prefer the devnet variants when present so test paylinks hit api.dev.hel.io.

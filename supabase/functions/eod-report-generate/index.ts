@@ -31,7 +31,7 @@
 //
 // Env vars (set via Supabase Dashboard -> Edge Functions -> Secrets, NOT the
 // same store as nobletradingapp's Vercel env — copy the same values over):
-//   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY   — auto-injected
+//   SUPABASE_URL, SUPABASE_SECRET_KEYS   — auto-injected
 //   INTERNAL_FUNCTION_SECRET                  — shared secret, manual trigger
 //   NVIDIA_NIM_API_KEY, NVIDIA_NIM_MODEL       — LLM provider (OpenRouter removed)
 // =============================================================================
@@ -39,7 +39,12 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+// Supabase's new secret key env var is a JSON object keyed by key name
+const SUPABASE_SECRET_KEYS = JSON.parse(
+  Deno.env.get("SUPABASE_SECRET_KEYS") ?? "{}"
+);
+const SUPABASE_SERVICE_KEY =
+  (SUPABASE_SECRET_KEYS.kairos ?? Object.values(SUPABASE_SECRET_KEYS)[0])!;
 const INTERNAL_SECRET = Deno.env.get("INTERNAL_FUNCTION_SECRET") ?? "";
 
 const NVIDIA_NIM_API_KEY = Deno.env.get("NVIDIA_NIM_API_KEY") ?? "";
@@ -127,50 +132,73 @@ function dedupeEpisodes(rows: any[]): any[] {
 
 function symbolPrompt(rec: any, reportDate: string) {
   const lines = [`Symbol: ${rec.symbol}`, `Date: ${reportDate}`];
+
+  // ── Section 1: New signal issued today ─────────────────────────────────
   if (rec.new_signal) {
     const s = rec.new_signal;
-    // `ev` is the model's expected value in PRICE UNITS (not dollars). Do not
-    // present it as $ — the LLM previously wrote "realized $0.02 fell short of
-    // predicted EV $0.00", which is both unit-wrong and direction-wrong.
     const ev = s.ev == null ? null : Number(s.ev);
     const evNote =
       ev == null
         ? "model expected value: not published"
         : `model expected value ${ev.toFixed(2)} (price units, not dollars)`;
     lines.push(
-      `New signal issued today: direction ${s.signal}, regime ${s.regime || "unknown"}, ` +
-        `predicted win probability (bracket) ${fmtPct(s.p_win)}, ${evNote}, ` +
-        `effective Kelly ${Number(s.effective_kelly ?? 0).toFixed(3)}.`
+      `[NEW SIGNAL] Direction: ${s.signal}, regime: ${s.regime || "unknown"}, ` +
+        `predicted win probability (bracket): ${fmtPct(s.p_win)}, ${evNote}, ` +
+        `effective Kelly: ${Number(s.effective_kelly ?? 0).toFixed(3)}.`
     );
   } else {
-    lines.push("No new qualified signal issued today.");
+    lines.push("[NEW SIGNAL] No new qualified signal issued today.");
   }
+
+  // ── Section 2: Signals resolved today ─────────────────────────────────
   if (rec.resolved) {
     const r = rec.resolved;
+    const hitRate = r.n > 0 ? ((r.n_tp / r.n) * 100).toFixed(1) : "0.0";
     lines.push(
-      `${r.n} signal(s) resolved today: ${r.n_tp} hit target, ${r.n_sl} hit stop, ${r.n_expired} expired. ` +
-        `Net realized P&L: $${r.total_pnl_dollars.toFixed(2)} (dollars).`
+      `[RESOLVED] ${r.n} signal(s) resolved today: ${r.n_tp} hit target, ${r.n_sl} hit stop, ${r.n_expired} expired. ` +
+        `Hit rate: ${hitRate}%. Net realized P&L: $${r.total_pnl_dollars.toFixed(2)}.`
     );
   } else {
-    lines.push("No signals resolved today.");
+    lines.push("[RESOLVED] No signals resolved today.");
   }
+
+  // ── Section 3: Calibration snapshot ────────────────────────────────────
   if (rec.calibration) {
     const c = rec.calibration;
+    const reliability = c.n < 20 ? " (LOW RELIABILITY — small sample)" : "";
     lines.push(
-      `Calibration status: ${c.status}, predicted win rate ${fmtPct(c.avg_predicted_p_win)} vs ` +
-        `realized win rate ${fmtPct(c.realized_win_rate)} (n=${c.n} resolved samples).`
+      `[CALIBRATION] Status: ${c.status}, predicted win rate: ${fmtPct(c.avg_predicted_p_win)} vs ` +
+        `realized win rate: ${fmtPct(c.realized_win_rate)} (n=${c.n} resolved samples)${reliability}.`
     );
   }
-  if (rec.current_price != null) {
-    lines.push(`Current price: ${rec.current_price}` + (rec.new_signal ? ` (entry was ${rec.new_signal.entry_price})` : "."));
+
+  // ── Section 4: Current price context ──────────────────────────────────
+  if (rec.current_price != null && rec.new_signal) {
+    const entry = rec.new_signal.entry_price;
+    const current = rec.current_price;
+    const direction = rec.new_signal.signal;
+    const priceDelta = current - entry;
+    const priceDeltaPct = entry !== 0 ? ((priceDelta / entry) * 100).toFixed(2) : "0.00";
+    const favorable =
+      (direction === "sell" && priceDelta < 0) || (direction === "buy" && priceDelta > 0);
+    lines.push(
+      `[PRICE] Current: ${current}, entry: ${entry}, delta: ${priceDelta.toFixed(2)} (${priceDeltaPct}%) — ` +
+        `${favorable ? "favorable" : "unfavorable"} for a ${direction} signal.`
+    );
+  } else if (rec.current_price != null) {
+    lines.push(`[PRICE] Current: ${rec.current_price}.`);
   }
+
+  // ── Instructions ──────────────────────────────────────────────────────
   lines.push(
-    "Write a 2-4 sentence factual summary of how this symbol's signal(s) performed today relative to what was predicted.",
-    "STRICT RULES:",
-    "- Never say realized P&L 'fell short of', 'missed', or 'underperformed' predicted expected value when realized P&L is greater than predicted EV.",
-    "- Do not compare dollar P&L to model EV unless both are clearly the same unit. Prefer describing outcomes (target/stop/expired) and net dollar P&L on their own.",
-    "- If model EV is zero, missing, or near zero, omit any shortfall/beat comparison entirely.",
-    "- If realized net is positive, describe it as positive. If negative, describe it as negative. No spin."
+    "Write a 2-4 sentence factual summary of how this symbol's signal(s) performed today.",
+    "REQUIREMENTS:",
+    "- Distinguish between the RESOLVED hit rate (per-symbol, today) and the CALIBRATION win rate (broader sample). Do not conflate them.",
+    "- If calibration n < 20, note that the calibration sample is too small for strong conclusions.",
+    "- Describe the price movement context (favorable/unfavorable) when a new signal exists.",
+    "- If realized P&L is positive, describe it as positive. If negative, describe it as negative. No spin.",
+    "- Do not compare dollar P&L to model EV (different units).",
+    "- If model EV is zero, missing, or near zero, omit any shortfall/beat comparison entirely."
   );
   return lines.join("\n");
 }

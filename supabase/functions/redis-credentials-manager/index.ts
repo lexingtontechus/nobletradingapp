@@ -50,14 +50,19 @@
 //   REDIS_CRED_ENCRYPTION_KEY   — base64 of 32 random bytes (openssl rand -base64 32)
 //   INTERNAL_FUNCTION_SECRET    — shared secret for X-Internal-Secret header
 //   SUPABASE_URL                — auto-injected
-//   SUPABASE_SERVICE_ROLE_KEY   — auto-injected
+//   SUPABASE_SECRET_KEYS   — auto-injected
 // =============================================================================
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Redis } from "npm:ioredis@5.4.3";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+// Supabase's new secret key env var is a JSON object keyed by key name
+const SUPABASE_SECRET_KEYS = JSON.parse(
+  Deno.env.get("SUPABASE_SECRET_KEYS") ?? "{}"
+);
+const SUPABASE_SERVICE_KEY =
+  (SUPABASE_SECRET_KEYS.kairos ?? Object.values(SUPABASE_SECRET_KEYS)[0])!;
 const REDIS_ADMIN_URL = Deno.env.get("REDIS_ADMIN_URL")!;
 const ENCRYPTION_KEY_B64 = Deno.env.get("REDIS_CRED_ENCRYPTION_KEY")!;
 const INTERNAL_SECRET = Deno.env.get("INTERNAL_FUNCTION_SECRET")!;

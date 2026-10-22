@@ -1,4 +1,4 @@
-import { supabase } from "@/utils/supabase/_server";
+import { getClient } from "@/utils/supabase/_server";
 import { LineChartPayments } from "./components/linechart_payments";
 
 // Year-to-date monthly revenue area chart (all plans combined).
@@ -11,6 +11,11 @@ import { LineChartPayments } from "./components/linechart_payments";
 // revenue (the old "active/expired/renewed" naming was misleading — in the
 // new schema every payment is either an initial or a renewal).
 export default async function WidgetPaymentsChart() {
+
+  const supabase = getClient();
+  if (!supabase) {
+    return <div className="text-error p-4">Error loading widget: Supabase is not configured.</div>;
+  }
   const currentYear = new Date().getFullYear();
   const yearStart = `${currentYear}-01-01`;
   const yearEnd = `${currentYear + 1}-01-01`;

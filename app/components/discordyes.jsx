@@ -18,7 +18,7 @@ export default function DiscordYes() {
         </div>
       </div>
       <div className="btn rounded-full max-w-[340px] blurple">
-        <img className="size-8" src="/logoDiscord.svg" />
+        <img className="size-8" src="/logoDiscord.svg" alt="" />
         <Link href={DISCORDURL} target="_blank">
           MEMBERS
         </Link>

@@ -27,18 +27,26 @@ import { auth } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
 import { cached } from "@/utils/api-cache";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { auth: { persistSession: false } }
-);
+// Lazy singleton: createClient throws at module load when env is absent,
+// which takes down every route in the app at import time. Absent config
+// becomes a null client the handler turns into a clean 503 instead.
+let _client = null;
+function getClient() {
+  if (!_client) {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.SUPABASE_SECRET_KEY;
+    if (!url || !key) return null;
+    _client = createClient(url, key, { auth: { persistSession: false } });
+  }
+  return _client;
+}
 
 const todayUtc = () => new Date().toISOString().slice(0, 10);
 
 // Fetch a single report row (by exact date, or the most recent available).
 // Cached in-process for 5 min: the underlying row is built once/day and is
 // immutable, so a short TTL just avoids a PostgREST round-trip per tab switch.
-async function fetchReport(exactDate) {
+async function fetchReport(supabase, exactDate) {
   const cacheKey = `eod:${exactDate || "latest"}`;
   return cached(cacheKey, 300_000, async () => {
     if (exactDate) {
@@ -60,6 +68,14 @@ async function fetchReport(exactDate) {
 }
 
 export async function GET(request) {
+
+  const supabase = getClient();
+  if (!supabase) {
+    return NextResponse.json(
+      { error: "This endpoint is not configured on this deployment." },
+      { status: 503, headers: { "cache-control": "no-store" } }
+    );
+  }
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -72,7 +88,7 @@ export async function GET(request) {
   }
 
   const today = todayUtc();
-  const { data, error } = await fetchReport(requestedDate || null);
+  const { data, error } = await fetchReport(supabase, requestedDate || null);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 502 });

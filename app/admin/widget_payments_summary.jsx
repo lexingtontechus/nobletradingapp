@@ -1,4 +1,4 @@
-import { supabase } from "@/utils/supabase/_server";
+import { getClient } from "@/utils/supabase/_server";
 
 // Current-month revenue summary cards, one per plan.
 // Replaces the old `widget_payments_summary` table.
@@ -12,6 +12,11 @@ const monthStart = `${currentYear}-${currentMonth.toString().padStart(2, "0")}-0
 const monthEnd = `${currentYear}-${(currentMonth + 1).toString().padStart(2, "0")}-01`;
 
 export default async function WidgetPaymentsSummary() {
+
+  const supabase = getClient();
+  if (!supabase) {
+    return <div className="text-error p-4">Error loading widget: Supabase is not configured.</div>;
+  }
   // Fetch all successful payments this month, with their plan title.
   // Grouping is done client-side (Supabase doesn't support GROUP BY in the
   // PostgREST API; v_revenue_summary view does monthly grouping but we need

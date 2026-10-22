@@ -1,4 +1,4 @@
-import { supabase } from "@/utils/supabase/_server";
+import { getClient } from "@/utils/supabase/_server";
 import BarChartCustomersSignalScout from "./components/barchart_customers_signalscout.jsx";
 import BarChartCustomersPrecisionPro from "./components/barchart_customers_precisionpro.jsx";
 
@@ -15,6 +15,11 @@ import BarChartCustomersPrecisionPro from "./components/barchart_customers_preci
 // For a simpler, equally useful metric we use `payment_transactions` filtered
 // to is_renewal = false (initial payments only) grouped by month + plan.
 export default async function WidgetCustomersChart() {
+
+  const supabase = getClient();
+  if (!supabase) {
+    return <div className="text-error p-4">Error loading widget: Supabase is not configured.</div>;
+  }
   const today = new Date();
   const yearStart = `${today.getFullYear()}-01-01`;
   const yearEnd = `${today.getFullYear() + 1}-01-01`;

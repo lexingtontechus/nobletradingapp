@@ -17,7 +17,7 @@ the anon key before believing read-only.
      Use NON-DESTRUCTIVE probes or be ready to restore immediately with the
      service key (SUPABASE_KEY in profiles/ultron/.env).
 3. Anon key source: `nobletradingapp/.env.local`
-   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_ANON_KEY` (sb_publishable_…).
+   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (sb_publishable_…).
 
 ## Fix pattern (migration 112)
 - `ALTER TABLE <t> ENABLE ROW LEVEL SECURITY` (idempotent) on each table.

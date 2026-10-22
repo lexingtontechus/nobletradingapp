@@ -33,6 +33,7 @@ import { SubscriptionStatusBadge } from "../components/subscription-status-badge
 // Token reveal lives inside TalariaSignalCopyPanel.
 import { TalariaSignalCopyPanel } from "../components/talaria-signal-copy-panel"
 import PlanSelector from "../components/plan-selector"
+import { hasSubscriberAccess } from "@/utils/subscription-access"
 
 // -----------------------------------------------------------------------------
 // HYBRID AUTH PATTERN (see supabase/functions/helio-webhook/index.ts):
@@ -109,9 +110,14 @@ export default function Portal() {
   const sub = data?.subscription
   const payments = data?.payments ?? []
   const events = data?.events ?? []
+  const role = data?.user?.role ?? null
   // Prefer the fresh API value; fall back to the instant Clerk-cached value.
   const effectiveStatus = sub?.status ?? instantStatus ?? null
-  const hasActive = !!sub && ["pending", "active", "grace"].includes(sub.status)
+  // ADMIN IS THE TOP OF THE GATE — full access regardless of subscription
+  // state. Otherwise the subscription must be CURRENT (date-aware): `status`
+  // alone is driven only by Helio ENDED webhooks and can stay "active" long
+  // after the period lapsed.
+  const hasActive = role === "admin" || hasSubscriberAccess(sub)
 
   // Detect pending→active transition → show a success flash once
   useEffect(() => {
@@ -156,7 +162,7 @@ export default function Portal() {
     fireSync()
     const id = setInterval(fireSync, 15000)
     return () => clearInterval(id)
-  }, [isSignedIn, needsSync, sub?.id])
+  }, [isSignedIn, needsSync, sub?.id, sub?.plans?.id])
 
   if (!isSignedIn) {
     return (
@@ -288,9 +294,11 @@ export default function Portal() {
         {/* Onboarding checklist (progressive) */}
         <OnboardingChecklist
           accountCreated
-          hasSubscription={!!hasActive || instantStatus === "active"}
+          hasSubscription={hasActive}
           subscriptionActive={
-            sub?.status === "active" || instantStatus === "active"
+            role === "admin" ||
+            sub?.status === "active" ||
+            instantStatus === "active"
           }
         />
 
