@@ -13,7 +13,7 @@ function parseMarkdown(text) {
   // Convert [link text](url) to <a>
   text = text.replace(
     /\[([^\]]+)\]$$([^)]+)$$/g,
-    '<a href="$2" className="text-blue-600 hover:text-blue-800 underline" target="_blank" rel="noopener noreferrer">$1</a>'
+    '<a href="$2" class="text-blue-600 hover:text-blue-800 underline" target="_blank" rel="noopener noreferrer">$1</a>'
   );
 
   // Convert line breaks to <br>
@@ -28,7 +28,7 @@ function parseMarkdown(text) {
     const trimmedLine = line.trim();
     if (trimmedLine.startsWith("- ")) {
       if (!inList) {
-        processedLines.push('<ul className="list-none list-outside space-y-1">');
+        processedLines.push('<ul class="list-none list-outside space-y-1">');
         inList = true;
       }
       processedLines.push(`<li>${trimmedLine.substring(2)}</li>`);
