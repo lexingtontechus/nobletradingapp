@@ -69,31 +69,23 @@ export function CalibrationSection({ data }) {
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
-      <div className="grid gap-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <SymbolPicker
-            value={symbol}
-            onChange={setSymbol}
-            symbols={data.meta.symbols}
-            label="Select symbol for calibration"
-          />
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-            <LegendItem color={SERIES_COLORS.amber}>base rate (level-only)</LegendItem>
-            <LegendItem color={SERIES_COLORS.emerald}>regime-conditional</LegendItem>
-            <LegendItem color={SERIES_COLORS.zinc} dashed>
-              perfect calibration
-            </LegendItem>
-          </div>
-        </div>
+    <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(min(100%,32rem),1fr))]">
+      <div className="grid content-start gap-4">
+        <SymbolPicker
+          value={symbol}
+          onChange={setSymbol}
+          symbols={data.meta.symbols}
+          label="Select symbol for calibration"
+        />
 
         <div className="rounded-xl border border-base-300 bg-base-100 p-3 md:p-4">
           <p className="mb-2 px-1 text-xs text-muted-foreground">
-            Reliability · x = predicted p(TP), y = empirical TP rate · {symbol}
+            Reliability · {symbol} — predicted p(TP) vs realized TP rate. The amber and emerald
+            curves are the two calibration models; the dashed diagonal is perfect calibration.
           </p>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <ScatterChart data={rows} margin={{ top: 8, right: 12, bottom: 0, left: -6 }}>
+              <ScatterChart data={rows} margin={{ top: 8, right: 16, bottom: 16, left: 0 }}>
                 <XAxis
                   type="number"
                   dataKey="x"
@@ -102,15 +94,30 @@ export function CalibrationSection({ data }) {
                   tickFormatter={(v) => fmtPct(v, 0)}
                   axisLine={{ stroke: "var(--border)" }}
                   tickLine={false}
+                  label={{
+                    value: "predicted p(TP)",
+                    position: "insideBottom",
+                    offset: -6,
+                    fill: "var(--muted-foreground)",
+                    fontSize: 11,
+                  }}
                 />
                 <YAxis
                   type="number"
                   domain={domain}
                   tick={AXIS_TICK_STYLE}
                   tickFormatter={(v) => fmtPct(v, 0)}
-                  width={48}
+                  width={72}
                   axisLine={false}
                   tickLine={false}
+                  label={{
+                    value: "empirical TP rate",
+                    angle: -90,
+                    position: "insideLeft",
+                    offset: 12,
+                    fill: "var(--muted-foreground)",
+                    fontSize: 11,
+                  }}
                 />
                 <Tooltip
                   content={
@@ -153,6 +160,13 @@ export function CalibrationSection({ data }) {
                 />
               </ScatterChart>
             </ResponsiveContainer>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-base-300 px-1 pt-3">
+            <LegendItem color={SERIES_COLORS.amber}>base rate (level-only)</LegendItem>
+            <LegendItem color={SERIES_COLORS.emerald}>regime-conditional</LegendItem>
+            <LegendItem color={SERIES_COLORS.zinc} dashed>
+              perfect calibration
+            </LegendItem>
           </div>
         </div>
 

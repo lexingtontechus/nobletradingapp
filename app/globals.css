@@ -53,6 +53,15 @@
   --font-sans: var(--font-public-sans), ui-sans-serif, system-ui, sans-serif;
   --font-serif: var(--font-cormorant-sc), ui-serif, Georgia, serif;
   --font-mono: var(--font-ibm-plex-mono), ui-monospace, SFMono-Regular, monospace;
+
+  /* shadcn-style color tokens — reference the theme vars declared in .dark.
+     Without these, utilities like `text-muted-foreground` never generate. */
+  --color-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-accent-foreground: var(--accent-foreground);
 }
 
 body {
@@ -132,8 +141,8 @@ h6 {
 .dark {
   --background: oklch(0.192 0.015 272.492); /* Ink #12141B */
   --foreground: oklch(0.944 0.017 88.001); /* Marble #F1ECE0 */
-  /*  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.985 0 0);*/
+  --card: oklch(0.237 0.02 271.789); /* Ink-2 #1B1E28 */
+  --card-foreground: oklch(0.944 0.017 88.001); /* Marble */
   --popover: oklch(0.237 0.02 271.789); /* Ink-2 #1B1E28 */
   --popover-foreground: oklch(0.944 0.017 88.001); /* Marble */
   --primary: oklch(0.647 0.108 70.385); /* Bronze #B8823D */
@@ -142,8 +151,7 @@ h6 {
   --secondary-foreground: oklch(0.985 0 0);*/
   --muted: oklch(0.237 0.02 271.789); /* Ink-2 */
   --muted-foreground: oklch(0.674 0.02 86.167); /* Dim #9C9689 */
-  /* --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground: oklch(0.985 0 0);*/
+  --accent-foreground: oklch(0.192 0.015 272.492); /* Ink */
   --destructive: oklch(0.539 0.139 34.587); /* Oxide #B04A32 */
   /* --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);*/

@@ -288,7 +288,7 @@ export function GateBacktest({ data }) {
         {fmtR(pooled.cn_mean_loss_diff, 4)}.
       </p>
 
-      <div className="alert alert-warning">
+      <div className="alert alert-warning rounded-lg">
         <TriangleAlert className="size-5 shrink-0" aria-hidden="true" />
         <p className="text-xs leading-relaxed">{howToRead.join(" ")}</p>
       </div>

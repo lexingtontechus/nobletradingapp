@@ -49,7 +49,7 @@ function RegimeTooltip({ active, payload }) {
   if (!row) return null;
   return (
     <div className="rounded-lg border border-base-300 bg-base-100 px-3 py-2 text-xs shadow-lg">
-      <div className="mb-1 font-mono text-[11px] text-muted-foreground">
+      <div className="mb-1 font-mono text-[11px] text-muted-foreground text-secondary">
         {row.t.slice(0, 16).replace("T", " ")} UTC
       </div>
       <div className="grid gap-0.5">
@@ -96,7 +96,7 @@ function SmallAreaChart({ rows, dataKey, color, label, domain, syncId }) {
           [{domain[0]}, {domain[1]}]
         </span>
       </div>
-      <div className="h-[140px]">
+      <div className="h-35">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={rows} syncId={syncId} margin={{ top: 4, right: 4, bottom: 0, left: -18 }}>
             <XAxis

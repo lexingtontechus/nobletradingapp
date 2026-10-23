@@ -103,7 +103,7 @@ export function TsfmReframe({ data }) {
             </p>
             <p>{data.tsfm_reframe.conclusion}</p>
           </div>
-          <p className="alert alert-warning text-xs leading-relaxed">
+          <p className="alert alert-warning text-xs leading-relaxed rounded-lg">
             Zero-shot TSFMs: no directional edge, lose to HAR on vol. Their role: calibrated
             vol spreads for sizing/geometry. Direction and edge come from regime values.
           </p>

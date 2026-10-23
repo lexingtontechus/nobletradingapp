@@ -179,7 +179,7 @@ export function BarrierPhysics({ data }) {
               Crosscheck — repo barrier_null vs independent MC
             </span>
             <span className="badge badge-sm badge-success font-mono">
-              physics verified twice
+              Physics Verified Twice
             </span>
           </div>
           <table className="table table-sm">

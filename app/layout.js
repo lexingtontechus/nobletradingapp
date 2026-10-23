@@ -56,7 +56,7 @@ export default function RootLayout({ children }) {
         popup: true,
       }}
     >
-      <html lang="en">
+      <html lang="en" className="dark">
         <body
           className={`${publicSans.variable} ${cormorantSc.variable} ${ibmPlexMono.variable} antialiased`}
         >

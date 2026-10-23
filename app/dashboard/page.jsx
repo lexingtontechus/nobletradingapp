@@ -3165,18 +3165,20 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-base-300">
       <div className="mx-auto max-w-7xl px-4 py-8 space-y-6">
-        {/* Header bar — mirrors tla-header */}
-        <div className="flex items-center justify-between gap-3 pb-4 border-b border-base-300">
-
-            <h1 className="text-2xl font-bold text-center">Talaria Dashboard <TalariaMark size={32} /> {planTitle}</h1>
-
-          {/* Quick nav — link to the portal for subscription management */}
-            <Link href="/dashboard/edge-lab" className="btn btn-sm btn-outline btn-secondary">
-             Edge Lab
-            </Link>
-            <Link href="/portal" className="btn btn-sm btn-outline btn-secondary">
-             Portal
-            </Link>
+        {/* Menu bar */}
+        {/* Quick nav — link to the Edge-Lab and Portal for subscription management */}
+        <div className="flex justify-end-safe">
+          <div className="mr-2"><Link href="/dashboard/edge-lab" className="btn btn-sm btn-outline btn-secondary">
+           Edge Lab
+          </Link></div>
+          <Link href="/portal" className="btn btn-sm btn-outline btn-secondary">
+           Portal
+          </Link>
+        </div>
+        <div className="gap-2 pb-2 border-b border-base-300">
+          <div className="flex">
+            <h1 className="text-2xl font-bold">Talaria Dashboard <TalariaMark size={32} /> {planTitle}</h1>
+          </div>
 
         </div>
 

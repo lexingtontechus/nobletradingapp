@@ -13,6 +13,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Activity,
   AlertCircle,
@@ -32,7 +33,6 @@ import {
 import { CalibrationSection } from "@/components/edge-lab/calibration-section";
 import { BarrierPhysics } from "@/components/edge-lab/barrier-physics";
 import { EdgeSurface } from "@/components/edge-lab/edge-surface";
-import { FixManifest } from "@/components/edge-lab/fix-manifest";
 import { GateBacktest } from "@/components/edge-lab/gate-backtest";
 import { HeroStrip } from "@/components/edge-lab/hero-strip";
 import { RegimeValues } from "@/components/edge-lab/regime-values";
@@ -126,8 +126,20 @@ export default function EdgeLabPage() {
   const engine = meta.engine ?? "regime_edge v1";
 
   return (
-    <div className="flex min-h-screen flex-col">
-      {/* Header */}
+    <div className="min-h-screen bg-base-300">
+            <div className="mx-auto max-w-7xl px-4 py-8 space-y-6">
+      {/* Menu bar */}
+      {/* Quick nav — link to the Edge-Lab and Portal for subscription management */}
+      <div className="flex justify-end-safe m-2">
+        <div className="mr-2"><Link href="/dashboard" className="btn btn-sm btn-outline btn-secondary">
+         Dashboard
+        </Link></div>
+        <Link href="/portal" className="btn btn-sm btn-outline btn-secondary">
+         Portal
+        </Link>
+      </div>
+
+    {/* Header */ }
       <header className="sticky top-0 z-40 border-b border-base-300 bg-base-200/80 backdrop-blur">
         <div className="mx-auto flex w-full max-w-7xl items-center gap-3 px-4 py-3 md:px-8">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-primary/40 bg-primary/10 text-primary">
@@ -137,7 +149,7 @@ export default function EdgeLabPage() {
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-base font-semibold tracking-tight md:text-lg">Edge Lab</h1>
               <span className="badge badge-sm badge-outline font-mono">
-                mathematical audit
+                Audit
               </span>
             </div>
             <p className="mt-0.5 hidden text-xs leading-relaxed text-muted-foreground sm:block">
@@ -285,17 +297,6 @@ export default function EdgeLabPage() {
             >
               <TsfmReframe data={data} />
             </SectionShell>
-
-            {/* 09 — fix manifest */}
-            <SectionShell
-              id="fixes"
-              index="09"
-              title="Fix Manifest — what shipped"
-              description="All fixes, files touched, and the tests that pin them."
-              icon={ListChecks}
-            >
-              <FixManifest data={data} />
-            </SectionShell>
           </>
         )}
       </main>
@@ -313,6 +314,7 @@ export default function EdgeLabPage() {
           ) : null}
         </div>
       </footer>
-    </div>
+      </div>
+      </div>
   );
 }

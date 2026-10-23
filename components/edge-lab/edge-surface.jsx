@@ -138,7 +138,7 @@ export function EdgeSurface({ data }) {
               ))}
             </div>
           </div>
-          <div className="h-[320px]">
+          <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={bins} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
                 <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
@@ -283,7 +283,7 @@ export function EdgeSurface({ data }) {
           </div>
         ) : null}
 
-        <div className="alert alert-warning">
+        <div className="alert alert-warning rounded-lg">
           <p className="text-xs leading-relaxed">
             Edge predictability is weak, not decisive: {sigCells.length}/{totalCells}{" "}
             feature x symbol tests significant at alpha=0.05. The regime value is an honest,
