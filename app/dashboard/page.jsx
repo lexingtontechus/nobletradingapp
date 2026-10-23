@@ -766,9 +766,9 @@ function RenkoSection({ sweeps, symbolList, selectedSym, onSelect, renkoBricks, 
             <button
               key={s}
               className={
-                "px-3 py-1 text-sm font-mono rounded border btn" +
+                "px-3 py-1 text-sm font-mono rounded border btn " +
                 (s === activeSym
-                  ? "bg-primary text-secondary border-primary"
+                  ? "bg-primary text-primary-content border-primary"
                   : "bg-base-200 text-base-content border-base-300")
               }
               onClick={() => onSelect(s)}
@@ -3317,6 +3317,10 @@ export default function DashboardPage() {
         {/* Portfolio tab content */}
         {activeTab === "portfolio" && (
           <Fragment>
+            {/* Signal risk overview -- open access to every subscriber, not gated on
+                Precision Pro. The paper/portfolio tear-sheets below remain Pro-only. */}
+            <SignalRiskCard />
+
             {isPro ? (
               <>
                 {/* Paper equity summary (real data from v_paper_equity + v_paper_positions) */}
@@ -3327,14 +3331,11 @@ export default function DashboardPage() {
 
                 {/* Paper vs equal-weight comparison */}
                 <VsEqualWeightTable rows={vsEqual} alignedRows={vsEqualAligned} />
-
-                {/* Signal risk overview (correlation, agreement, Kelly concentration) */}
-                <SignalRiskCard />
               </>
             ) : (
               <PlanGateCard
                 title="Portfolio analytics"
-                body="Upgrade to see paper equity, portfolio tear-sheet, paper vs equal-weight comparison, and signal risk overview."
+                body="Upgrade to see paper equity, portfolio tear-sheet, and paper vs equal-weight comparison."
               />
             )}
           </Fragment>

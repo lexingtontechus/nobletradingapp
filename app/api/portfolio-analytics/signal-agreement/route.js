@@ -13,6 +13,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { getSupabase, readAnalyticsCache } from "@/utils/portfolio-cache";
+import { roleFromLocalUser, checkRole } from "@/utils/roles";
 
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 
@@ -52,7 +53,7 @@ export async function GET(request) {
 
   const { data: localUser } = await supabase
     .from("users")
-    .select("id")
+    .select("id, role")
     .eq("clerk_user_id", userId)
     .maybeSingle();
   if (!localUser) {
@@ -68,20 +69,32 @@ export async function GET(request) {
     .limit(1)
     .maybeSingle();
 
-  const planSlug = subscription?.plans?.slug;
+  const planSlug = subscription?.plans?.slug ?? null;
 
-  if (planSlug !== "precision_pro") {
-    return NextResponse.json(
-      { error: "Signal agreement analysis is a Precision Pro feature." },
-      { status: 403 }
-    );
+  // Open access: any current subscriber (any plan) may view the matrices.
+  // A user with no active subscription is allowed only if they are an admin --
+  // who reads the precision_pro cache, mirroring the dashboard page's
+  // admin->precision_pro fallback. Admin is the top of the gate, not a tier.
+  if (!planSlug) {
+    let isAdmin = roleFromLocalUser(localUser, "admin");
+    if (isAdmin == null) {
+      isAdmin = await checkRole("admin");
+    }
+    if (!isAdmin) {
+      return NextResponse.json(
+        { error: "Active subscription required" },
+        { status: 403 }
+      );
+    }
   }
+
+  const cachePlanSlug = planSlug || "precision_pro";
 
   if (forceRefresh) {
-    await kickEdgeRefresh(planSlug);
+    await kickEdgeRefresh(cachePlanSlug);
   }
 
-  const cached = await readAnalyticsCache("v_signal_agreement_cache", planSlug);
+  const cached = await readAnalyticsCache("v_signal_agreement_cache", cachePlanSlug);
   const hasPayload = Boolean(cached?.payload);
   const ageMs = cached?.computed_at
     ? Date.now() - new Date(cached.computed_at).getTime()
