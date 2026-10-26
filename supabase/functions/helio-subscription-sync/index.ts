@@ -19,8 +19,27 @@
 //   subscription, plus the full transaction history. This poller is the
 //   backstop that reconciles whatever the webhook missed.
 //
-// Scheduling: pg_cron (see supabase/migrations/0007_helio_subscription_sync.sql)
-//   every 15 minutes. Invoked with X-Internal-Secret or X-Supabase-Cron.
+// Scheduling: pg_cron (see supabase/migrations/0007_helio_subscription_sync.sql;
+//   cadence widened 15 min -> hourly by 0034_helio_subscription_sync_cadence.sql).
+//   Invoked with X-Internal-Secret or X-Supabase-Cron.
+//
+// Cost note (2026-10-24): this poller was the single largest contributor to the
+//   project's Supabase Logs Ingest — every tick issued a fixed ~6-call REST
+//   sequence per subscription whether or not anything had changed. Two changes
+//   landed together:
+//     1. reconcileSubscription() short-circuits when the verdict is
+//        "unchanged" (same status + period_end + Helio tx id): no
+//        payment_transactions upsert, no subscription_events dedupe read, no
+//        users identity PATCH. Redis provisioning and the Clerk badge sync stay
+//        unconditional — they are external side effects, not Supabase REST
+//        traffic, and skipping them would risk a real outage (credentials never
+//        issued, badge never flipped) to save zero log volume.
+//     2. The two repeating console lines are throttled to once per key per 24 h
+//        (see logThrottled below).
+//   The hourly cadence is safe only because of (1): a renewal landing mid-window
+//   is picked up within the hour, and a no-op tick now costs ~2 REST reads
+//   instead of ~7 calls.
+//   Evidence: noble-trader-fastapi-backend/docs/scopes/20261024_SUPABASE_LOG_INGEST_REVIEW.md
 //
 // Env required:
 //   SUPABASE_URL, SUPABASE_SECRET_KEYS,
@@ -119,6 +138,27 @@ function deriveTokenDecimals(symbol: string): number {
 }
 
 // -----------------------------------------------------------------------------
+// Log throttle — suppress a repeating line for LOG_THROTTLE_MS per key.
+//
+// Edge-function isolates are reused across invocations, so a module-level map
+// survives from one 15-minute cron tick to the next. Without this, the same
+// orphan subscription re-emits an identical `console.warn` on every run
+// (9 distinct orphan subs x ~94 runs/day = ~850 lines/day) and the same dead
+// Clerk id re-emits an identical 404 (~3 ids x ~94 runs = ~280/day). Those two
+// messages alone were ~6.5% of this project's Supabase Logs Ingest.
+// See noble-trader-fastapi-backend/docs/scopes/20261024_SUPABASE_LOG_INGEST_REVIEW.md
+// -----------------------------------------------------------------------------
+const LOG_THROTTLE_MS = 24 * 60 * 60 * 1000; // re-report at most once a day
+const _logSeen = new Map<string, number>();
+
+function logThrottled(level: "warn" | "error", key: string, message: string): void {
+  const now = Date.now();
+  if (now - (_logSeen.get(key) ?? 0) < LOG_THROTTLE_MS) return;
+  _logSeen.set(key, now);
+  console[level](message);
+}
+
+// -----------------------------------------------------------------------------
 // Sync Clerk publicMetadata (best-effort, mirrors helio-webhook)
 // -----------------------------------------------------------------------------
 async function syncClerkMetadata(input: {
@@ -145,7 +185,12 @@ async function syncClerkMetadata(input: {
       body: JSON.stringify({ public_metadata: publicMetadata }),
     });
     if (!resp.ok) {
-      console.error(`Clerk metadata sync ${resp.status}: ${await resp.text()}`);
+      const body = await resp.text();
+      logThrottled(
+        "error",
+        `clerk-sync:${input.clerkUserId}:${resp.status}`,
+        `Clerk metadata sync ${resp.status}: ${body}`,
+      );
     }
   } catch (e) {
     console.error("Clerk metadata sync error:", e);
@@ -281,12 +326,20 @@ async function reconcileSubscription(plan: any, sub: any, summary: any): Promise
   const amountDecimal = tokenQuote?.fromAmountDecimal;
 
   // --- Identify the local user ---
-  // 1) by email (users.email unique)
-  let localUser: { id: string; clerk_user_id: string; role?: string } | null = null;
+  // 1) by email (users.email unique). discord_id/discord_username are selected
+  //    so the identity PATCH below can be skipped when the stored value already
+  //    matches — previously every tick issued a no-op PATCH (and a log line).
+  let localUser: {
+    id: string;
+    clerk_user_id: string;
+    role?: string;
+    discord_id?: string | null;
+    discord_username?: string | null;
+  } | null = null;
   if (email) {
     const { data } = await supabase
       .from("users")
-      .select("id, clerk_user_id, role")
+      .select("id, clerk_user_id, role, discord_id, discord_username")
       .ilike("email", email.trim())
       .maybeSingle();
     localUser = data ?? null;
@@ -302,7 +355,7 @@ async function reconcileSubscription(plan: any, sub: any, summary: any): Promise
     if (subRow) {
       const { data: u } = await supabase
         .from("users")
-        .select("id, clerk_user_id, role")
+        .select("id, clerk_user_id, role, discord_id, discord_username")
         .eq("id", subRow.user_id)
         .maybeSingle();
       localUser = u ?? null;
@@ -310,7 +363,11 @@ async function reconcileSubscription(plan: any, sub: any, summary: any): Promise
   }
   if (!localUser) {
     summary.unknownUsers += 1;
-    console.warn(`No local user for Helio sub ${helioSubId} (email=${email}, discord=${discordUser?.id})`);
+    logThrottled(
+      "warn",
+      `no-local-user:${helioSubId}`,
+      `No local user for Helio sub ${helioSubId} (email=${email}, discord=${discordUser?.id})`,
+    );
     return;
   }
   summary.matchedUsers += 1;
@@ -327,40 +384,78 @@ async function reconcileSubscription(plan: any, sub: any, summary: any): Promise
   // Existing row: by helio_subscription_id OR by (user, plan) active set
   const { data: existing } = await supabase
     .from("subscriptions")
-    .select("id, status, user_id, current_period_end")
+    .select("id, status, user_id, current_period_end, helio_transaction_id")
     .or(`helio_subscription_id.eq.${helioSubId},and(user_id.eq.${localUser.id},plan_id.eq.${plan.id},status.in.(pending,active,grace))`)
     .limit(1)
     .maybeSingle();
 
   if (existing) {
-    // Skip if nothing changed
-    if (existing.status === status && (existing as any).current_period_end === periodEnd) {
+    // "Unchanged" now also requires the same Helio transaction id. The previous
+    // predicate compared only status + period_end, which would call a renewal
+    // that lands on the same period_end "unchanged" and drop its audit row.
+    // The tx id is the third signal that genuinely nothing new happened.
+    const unchanged =
+      existing.status === status &&
+      (existing as any).current_period_end === periodEnd &&
+      (existing as any).helio_transaction_id === (latest?.id ?? null);
+
+    if (unchanged) {
+      // Nothing new — so no subscription write, no payment_transactions upsert,
+      // no subscription_events dedupe read, and no users identity PATCH. Those
+      // four calls fired on EVERY 15-minute tick regardless of change
+      // (~470 upserts + ~470 dedupe reads + ~475 identity patches per day),
+      // which was the bulk of this project's Supabase Logs Ingest.
+      //
+      // Redis provisioning and the Clerk badge sync stay unconditional: they
+      // are external side effects (not Supabase REST traffic) and idempotent,
+      // so skipping them would risk a real outage (credentials never issued,
+      // badge never flipped) to save zero log volume.
       summary.unchanged += 1;
-    } else {
-      const patch: Record<string, unknown> = {
-        status,
-        current_period_start: periodStart,
-        current_period_end: periodEnd,
-        grace_period_end: graceEnd,
-        helio_subscription_id: helioSubId,
-        helio_renewal_date: periodEnd,
-        helio_email: email ?? null,
-        helio_discord_id: discordUser?.id ?? null,
-        helio_discord_username: discordUser?.username ?? null,
-        helio_transaction_id: latest?.id ?? null,
-        updated_at: new Date().toISOString(),
-      };
-      const { error } = await supabase.from("subscriptions").update(patch).eq("id", existing.id);
-      if (error) throw new Error(`subscriptions update: ${error.message}`);
-      summary.updated += 1;
+      if (status === "active") {
+        await provisionRedis({ subscriptionId: existing.id, userId: localUser.id, planId: plan.id });
+      }
+      await syncClerkMetadata({
+        clerkUserId: localUser.clerk_user_id,
+        subscriptionStatus: status,
+        planTitle: plan.title,
+        discordId: discordUser?.id ? String(discordUser.id) : undefined,
+        role: localUser.role,
+      });
+      return;
     }
-    // sync identity to users row
-    if (discordUser?.id || email) {
-      const userPatch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-      if (discordUser?.id) userPatch.discord_id = String(discordUser.id);
-      if (discordUser?.username) userPatch.discord_username = String(discordUser.username);
+
+    const patch: Record<string, unknown> = {
+      status,
+      current_period_start: periodStart,
+      current_period_end: periodEnd,
+      grace_period_end: graceEnd,
+      helio_subscription_id: helioSubId,
+      helio_renewal_date: periodEnd,
+      helio_email: email ?? null,
+      helio_discord_id: discordUser?.id ?? null,
+      helio_discord_username: discordUser?.username ?? null,
+      helio_transaction_id: latest?.id ?? null,
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = await supabase.from("subscriptions").update(patch).eq("id", existing.id);
+    if (error) throw new Error(`subscriptions update: ${error.message}`);
+    summary.updated += 1;
+
+    // sync identity to users row — only when the stored value actually differs,
+    // so a no-op PATCH (and its log line) is not issued on every tick. A field
+    // Helio no longer provides is left untouched, matching the old semantics.
+    const userPatch: Record<string, unknown> = {};
+    if (discordUser?.id && String(discordUser.id) !== localUser.discord_id) {
+      userPatch.discord_id = String(discordUser.id);
+    }
+    if (discordUser?.username && String(discordUser.username) !== localUser.discord_username) {
+      userPatch.discord_username = String(discordUser.username);
+    }
+    if (Object.keys(userPatch).length > 0) {
+      userPatch.updated_at = new Date().toISOString();
       await supabase.from("users").update(userPatch).eq("id", localUser.id);
     }
+
     await maybeInsertTransaction(existing.id, localUser.id, plan.id, latest, summary);
     await maybeInsertEvent(existing.id, status, latest, summary);
     if (status === "active") {

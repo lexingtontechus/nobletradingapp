@@ -3168,6 +3168,9 @@ export default function DashboardPage() {
         {/* Menu bar */}
         {/* Quick nav — link to the Edge-Lab and Portal for subscription management */}
         <div className="flex justify-end-safe">
+          <div className="mr-2"><Link href="/dashboard/tsfm-lab" className="btn btn-sm btn-outline btn-secondary">
+           TSFM Lab
+          </Link></div>
           <div className="mr-2"><Link href="/dashboard/edge-lab" className="btn btn-sm btn-outline btn-secondary">
            Edge Lab
           </Link></div>

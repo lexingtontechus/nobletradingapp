@@ -49,3 +49,7 @@ __pycache__/
 
 # supabase cli temp
 supabase/.temp/
+
+# wrangler local mock state — `wrangler r2 object` defaults to --local, so this dir
+# can hold objects that never reached the remote bucket
+.wrangler/

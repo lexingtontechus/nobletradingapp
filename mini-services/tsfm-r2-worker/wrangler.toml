@@ -1,0 +1,10 @@
+name = "nt-tsfm-data"
+main = "src/index.js"
+compatibility_date = "2025-10-01"
+
+# Public on the account's workers.dev subdomain: nt-tsfm-data.lexington.workers.dev
+workers_dev = true
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "nt-tsfm-prices"

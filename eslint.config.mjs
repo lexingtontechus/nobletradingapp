@@ -16,6 +16,7 @@ export default defineConfig([
     ".next/**",
     "node_modules/**",
     "supabase/**",
+    "mini-services/**", // standalone services (Python sidecar, CF Worker) — not Next.js app code
     "**/_*", // underscore-prefixed scratch/dead files (Next convention)
   ]),
   {

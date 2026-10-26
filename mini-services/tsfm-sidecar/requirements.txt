@@ -1,0 +1,10 @@
+# Timestral-5M sidecar — CPU inference for the TSFM Lab's real-model arm.
+# Python 3.12 recommended (torch + the timestral library).
+fastapi>=0.115
+uvicorn>=0.30
+numpy>=2.0
+safetensors>=0.4
+huggingface-hub>=0.24
+torch>=2.4
+# official Timestral library (not on PyPI — install from the Mistral repo)
+timestral @ git+https://github.com/mistralai/timestral.git
