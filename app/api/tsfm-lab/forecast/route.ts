@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { forecast, type ForecastRequest } from "@/lib/tsfm-lab/harness"
-import type { SeriesId, Target, ModelId } from "@/lib/tsfm-lab/design"
+import { MODELS, type SeriesId, type Target, type ModelId } from "@/lib/tsfm-lab/design"
 import type { CovKey } from "@/lib/tsfm-lab/models"
 
 export const runtime = "nodejs"
@@ -9,15 +9,14 @@ export const maxDuration = 120
 
 const SERIES = new Set(["BTCUSD", "USDJPY", "USDCHF", "XAUUSD", "XAGUSD"])
 const TARGETS = new Set(["price", "vol", "direction"])
-const MODELS = new Set([
-  "timestral",
-  "tsfm",
-  "tsfm_base",
-  "naive",
-  "svol",
-  "ewma",
-  "har",
-])
+/** Lane discipline, single-sourced from design.ts MODELS: an arm may only be
+ *  forecast in a target lane it declares (e.g. the GARCH family is vol-only —
+ *  zero-drift mean equation, no price/direction forecast to had). This also
+ *  closes the pre-existing hole where any vol-only arm could be POSTed into
+ *  the price/direction lanes. */
+const MODEL_LANES = new Map<string, Set<string>>(
+  MODELS.map((m) => [m.id as string, new Set<string>(m.targets)]),
+)
 const COVS = new Set([
   "target_lag",
   "rv24",
@@ -44,7 +43,13 @@ export async function POST(req: NextRequest) {
     const series = String(body.series ?? "BTCUSD")
     const target = String(body.target ?? "price")
     const model = String(body.model ?? "tsfm")
-    if (!SERIES.has(series) || !TARGETS.has(target) || !MODELS.has(model)) {
+    const lanes = MODEL_LANES.get(model)
+    if (
+      !SERIES.has(series) ||
+      !TARGETS.has(target) ||
+      !lanes ||
+      !lanes.has(target) // arm not eligible for this lane (GARCH family: vol only)
+    ) {
       return NextResponse.json({ error: "invalid series/target/model" }, { status: 400 })
     }
     const horizon = Number(body.horizon ?? 24)

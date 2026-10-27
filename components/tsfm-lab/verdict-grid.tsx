@@ -1,17 +1,19 @@
 "use client"
 
 /* ---------------------------------------------------------------------------
- * VerdictGrid — the four R2 gates that answer "is it truly weak?":
+ * VerdictGrid — the five R2 gates that answer "is it truly weak?":
  * (1) Direction & mean edge vs coin & random walk, (2) Vol edge vs Log-HAR,
  * (3) Calibration (coverage ≈ nominal, ±5pp), (4) Covariate use (shuffle
- * Δ-CRPS from the deafness ablation + per-channel LOO importances).
+ * Δ-CRPS from the deafness ablation + per-channel LOO importances),
+ * (5) GARCH-family challenge (do the proven conditional-variance models
+ * displace Log-HAR?).
  * Real-model (Timestral-5M) numbers are preferred when the sidecar served
  * the view; stand-in numbers are tagged as such.
  * ------------------------------------------------------------------------- */
 
 import { useEffect, useState } from "react"
 import type { ReactNode } from "react"
-import type { EvalResponse, MetricRow, SeriesId, Target } from "@/lib/tsfm-lab/design"
+import type { EvalResponse, MetricRow, ModelId, SeriesId, Target } from "@/lib/tsfm-lab/design"
 import { cn } from "@/lib/utils"
 
 interface GateQuery {
@@ -63,6 +65,14 @@ const GATES: GateSpec[] = [
     queries: [{ series: "BTCUSD", target: "price", horizon: 24 }],
     meaning:
       "Wrong values, right distribution: shuffling a channel the model reads must hurt. Δ-CRPS ≤ 0 on both blocks ⇒ covariate-deaf on this view.",
+  },
+  {
+    id: "garch-family",
+    title: "GARCH family · BTCUSD · vol · 24h",
+    question: 'Does the proven GARCH family displace Log-HAR? ("should I just use GARCH?")',
+    queries: [{ series: "BTCUSD", target: "vol", horizon: 24 }],
+    meaning:
+      "GARCH(1,1)-N · GJR-t (TGARCH) · EGARCH-t — MLE fits frozen at eval start, scored against the SAME Log-HAR bar on the same origins. DISPLACES = ratio < 1 AND DM p < 0.05. Literature expectation: no displacement — GARCH earns its seat as a lane specialist (long horizons, low-vol FX), not a general winner. Measured on THIS repo's own data window; numbers move when the CSVs refresh.",
   },
 ]
 
@@ -223,7 +233,7 @@ function GateCard({ res }: { res: GateResult }) {
       </div>
     )
     sources = `numbers from: ${row?.label ?? "—"} · worst |Δ| ${(worst * 100).toFixed(1)}pp`
-  } else {
+  } else if (spec.id === "covariates") {
     // covariate use — the shuffle ablation (+ per-channel LOO lives in the lab panel)
     const [price] = views
     const ab = price.ablation
@@ -241,6 +251,87 @@ function GateCard({ res }: { res: GateResult }) {
       </div>
     )
     sources = `verdict from the deafness ablation · best block Δ ${best != null ? `${best >= 0 ? "+" : ""}${best.toFixed(1)}%` : "—"}`
+  } else {
+    // garch-family — the proven-methodology challenge, all arms vs the same bar
+    const [vol] = views
+    const FAMILY: ModelId[] = ["garch", "gjr", "egarch"]
+    const barRow = vol.rows.find((r) => r.model === "har")
+    const tsfmRow =
+      vol.rows.find((r) => r.model === "timestral") ?? vol.rows.find((r) => r.model === "tsfm")
+    const famRows = FAMILY
+      .map((id) => vol.rows.find((r) => r.model === id))
+      .filter((r): r is MetricRow => !!r)
+    const winners = famRows.filter((r) => (r.skillRatio ?? 1) < 1 && (r.dmP ?? 1) < 0.05)
+    passed = famRows.length ? (winners.length ? true : false) : null
+    stats = (
+      <div className="space-y-2">
+        <div className="grid grid-cols-2 gap-2 font-mono text-[11px]">
+          <Stat
+            label="bar pinball"
+            value={barRow?.pinball != null ? barRow.pinball.toFixed(5) : "—"}
+          />
+          <Stat
+            label="TSFM-class ratio"
+            tone={
+              (tsfmRow?.skillRatio ?? 1) < 0.98
+                ? "text-emerald-400"
+                : (tsfmRow?.skillRatio ?? 1) > 1.02
+                  ? "text-red-400"
+                  : "text-amber-400"
+            }
+            value={tsfmRow?.skillRatio?.toFixed(3) ?? "—"}
+          />
+        </div>
+        <div className="overflow-hidden rounded border border-neutral-800">
+          <table className="w-full font-mono text-[11px]">
+            <thead>
+              <tr className="bg-neutral-900/60 text-slate-500">
+                <th className="px-2 py-1 text-left font-normal">family arm</th>
+                <th className="px-2 py-1 text-right font-normal">ratio</th>
+                <th className="px-2 py-1 text-right font-normal">DM p</th>
+                <th className="px-2 py-1 text-right font-normal">cov80</th>
+              </tr>
+            </thead>
+            <tbody>
+              {famRows.map((r) => (
+                <tr key={r.model} className="border-t border-neutral-800/60">
+                  <td className="px-2 py-1 text-slate-300">{r.label}</td>
+                  <td
+                    className={cn(
+                      "px-2 py-1 text-right",
+                      (r.skillRatio ?? 1) < 1 ? "text-emerald-400" : "text-red-400",
+                    )}
+                  >
+                    {r.skillRatio?.toFixed(3) ?? "—"}
+                  </td>
+                  <td className="px-2 py-1 text-right text-slate-300">{r.dmP?.toFixed(4) ?? "—"}</td>
+                  <td className="px-2 py-1 text-right text-slate-400">
+                    {r.cov80 != null ? `${(r.cov80 * 100).toFixed(0)}%` : "—"}
+                  </td>
+                </tr>
+              ))}
+              {barRow && (
+                <tr className="border-t border-neutral-800/60 bg-neutral-900/40">
+                  <td className="px-2 py-1 text-slate-400">{barRow.label} (bar)</td>
+                  <td className="px-2 py-1 text-right text-slate-500">1.000</td>
+                  <td className="px-2 py-1 text-right text-slate-500">—</td>
+                  <td className="px-2 py-1 text-right text-slate-400">
+                    {barRow.cov80 != null ? `${(barRow.cov80 * 100).toFixed(0)}%` : "—"}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )
+    sources = winners.length
+      ? `displacing: ${winners.map((w) => w.label).join(", ")} · rolling-origin eval, same origins as the bar`
+      : "no family arm beats Log-HAR at DM p < 0.05 · rolling-origin eval, same origins as the bar"
+    detail =
+      tsfmRow?.skillRatio != null
+        ? `Context: the TSFM-class arm (${tsfmRow.label}) posts ratio ${tsfmRow.skillRatio.toFixed(3)} vs the same bar — family vs foundation model on one screen.`
+        : null
   }
 
   return (
@@ -270,7 +361,17 @@ function GateCard({ res }: { res: GateResult }) {
                   : "border-amber-500/40 text-amber-300",
             )}
           >
-            {passed === true ? "PASS" : passed === false ? "FAIL" : "UNDECIDED"}
+            {spec.id === "garch-family"
+              ? passed === true
+                ? "DISPLACES"
+                : passed === false
+                  ? "NO DISPLACEMENT"
+                  : "UNDECIDED"
+              : passed === true
+                ? "PASS"
+                : passed === false
+                  ? "FAIL"
+                  : "UNDECIDED"}
           </span>
           {!hasReal && (
             <span className="badge badge-outline border-neutral-700 text-slate-500">stand-in</span>
