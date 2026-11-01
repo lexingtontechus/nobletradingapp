@@ -124,8 +124,10 @@ export function dmTest(d: number[], lag: number): [number, number] {
 /* ------------------------------- model arms -------------------------------- */
 
 export function modelsFor(target: Target): ModelId[] {
+  // Vol lane: EWMA · GARCH family · seasonal profile · Log-HAR (the bar) ·
+  // TSFM stand-ins + the real model. Other lanes: the random walk + stand-ins.
   if (target === "vol")
-    return ["ewma", "svol", "har", "tsfm_base", "tsfm", "timestral"]
+    return ["ewma", "garch", "gjr", "egarch", "svol", "har", "tsfm_base", "tsfm", "timestral"]
   return ["naive", "tsfm_base", "tsfm", "timestral"]
 }
 

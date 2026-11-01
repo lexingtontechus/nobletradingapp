@@ -1,7 +1,7 @@
 /* ---------------------------------------------------------------------------
  * TSFM Probabilistic Forecast Lab — the single dashboard route.
  * §Lab (interactive fan + covariates) · §Evidence (rolling-origin table)
- * §Verdict (is it truly weak? 4 gates) · §Design (the training-model spec)
+ * §Verdict (is it truly weak? 5 gates) · §Design (the training-model spec)
  *
  * Ported from the standalone shadcn lab (kairos-pbm-build/tsfm-lab) to
  * nobletradingapp's Tailwind + daisyUI conventions: native <table>,
@@ -628,7 +628,7 @@ export default function Page() {
           <div className="flex items-center gap-2.5 mb-3">
             <Gauge className="h-5 w-5 text-orange-400" aria-hidden />
             <h2 id="vd-h" className="text-lg font-semibold">
-              Is it truly weak? — the four gates
+              Is it truly weak? — the five gates
             </h2>
           </div>
           <VerdictGrid />
@@ -674,6 +674,18 @@ export default function Page() {
                   its covariates are not yet paying rent (Δ-CRPS ≈ −4% when the past-only
                   block is shuffled). On efficient price lanes the weakness is the target&apos;s
                   signal-to-noise, not the model class.
+                </li>
+                <li>
+                  <span className="text-slate-200">
+                    The GARCH family, measured — the proven-methodology challenge.
+                  </span>{" "}
+                  GARCH(1,1) · GJR-t · EGARCH-t (MLE, frozen at eval start) against the same
+                  Log-HAR bar: no displacement on BTCUSD vol (ratios 0.96–1.00, all DM p &gt;
+                  0.24), Log-HAR keeps silver (XAGUSD 24–72h: family 1.5–2.0×,{" "}
+                  <em>worse</em>, p &lt; 0.001) — and the family&apos;s one robust win is
+                  low-vol FX at long horizon: USDCHF 72h, whole family ≈ 0.84, p ≈ 0.006.
+                  The lane-specialist pattern, measured on this repo&apos;s own window; the
+                  gate card above recomputes it per view.
                 </li>
               </ol>
               <div className="divider bg-neutral-800" />

@@ -11,6 +11,9 @@
  *                distribution at H=24)
  *   ewma         RiskMetrics EWMA variance + residual quantiles (vol)
  *   har          Log-HAR (RV_24/RV_72/RV_168) + residual quantiles (vol bar)
+ *   garch/gjr/egarch  the GARCH family (MLE, aggregate conditional variance
+ *                + empirical residual quantiles, vol lane only) — the
+ *                proven-methodology challengers; see ./garch.ts
  *   tsfm         covariate-conditioned ridge location+scale head with
  *                empirical standardized-residual quantiles — the harness
  *                stand-in for the foundation model (TimesFM-2.5 / Chronos-2
@@ -19,6 +22,7 @@
 
 import type { SeriesData } from "./data"
 import { QUANTILES, type Target, type ModelId } from "./design"
+import { garchArm, type GarchSpec } from "./garch"
 
 export const TAU = QUANTILES
 export type QVec = number[]
@@ -121,7 +125,10 @@ export function makeVolTargets(s: SeriesData) {
     const a = Math.max(0, i + 1)
     const b = Math.min(n, i + 1 + h)
     const cnt = ccnt[b] - ccnt[a]
-    if (b - a < h || cnt < Math.max(2, Math.floor(h / 3))) return NaN
+    // min(h, ·) guard: at h=1 the window holds exactly ONE return, so demanding
+    // ≥2 valid returns made every h=1 vol target NaN (empty H=1 fits, null fan
+    // heads). h≥2 behavior is unchanged (min(h, max(2, ⌊h/3⌋)) = max(...) there).
+    if (b - a < h || cnt < Math.min(h, Math.max(2, Math.floor(h / 3)))) return NaN
     return 0.5 * Math.log(Math.max(1e-18, (csum[b] - csum[a]) / cnt))
   }
   const rv168 = new Float64Array(n).fill(NaN)
@@ -615,7 +622,15 @@ export function harQuantiles(ctx: FeatureCtx, T: number, h: number): QVec {
 
 export type ArmPredict = (T: number, h: number) => QVec
 
-/** Baseline arms are stateless per call; tsfm arms bind a fitted head. */
+/** GARCH-family model ids → spec. */
+const GARCH_SPECS: Partial<Record<ModelId, GarchSpec>> = {
+  garch: "garch",
+  gjr: "gjr",
+  egarch: "egarch",
+}
+
+/** Baseline arms are stateless per call; tsfm arms bind a fitted head;
+ *  GARCH arms bind a fitted filter (module-cached, frozen at eval start). */
 export function armPredict(
   model: ModelId,
   ctx: FeatureCtx,
@@ -623,6 +638,12 @@ export function armPredict(
   covKeys: Set<CovKey>,
   fits?: Map<number, StandInFitH>,
 ): ArmPredict {
+  const garchSpec = GARCH_SPECS[model]
+  if (garchSpec) {
+    // respects (T, h): the fan widens with the aggregate-variance path
+    const arm = garchArm(garchSpec, ctx)
+    return (T, hh) => arm(T, hh)
+  }
   switch (model) {
     case "naive":
       return (T) => naiveQuantiles(ctx, T, h)

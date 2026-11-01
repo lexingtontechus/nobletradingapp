@@ -34,6 +34,7 @@ import { createClient } from "@/utils/supabase/client";
 import { hasSubscriberAccess } from "@/utils/subscription-access";
 import PlatformHealthCard from "../components/platform-health-card";
 import CalibrationScorecard from "../components/calibration-scorecard";
+import SignalContextCard, { claimOf } from "../components/signal-context-card";
 
 // -- Floating live-signals widget --
 // Replaces the old toast-per-signal + HotSignalsBanner pair (2026-09-06):
@@ -79,6 +80,45 @@ function rankOf(s) {
 
 function stateOf(s) {
   return s?.state || s?.kairos_event_window || null;
+}
+
+// Claims layer (Phase C, 2026-10-28): the claim object on a signal row —
+// arrives via the realtime broadcast `claim` field (Phase B transport) or
+// the sweeps row's `claim` column (migration 219). Dual-name fallback per
+// the rankOf/stateOf name-drift convention.
+function claimOfSignal(s) {
+  return claimOf(s);
+}
+
+// One chip when a claim exists: the bracket's positions in its registered
+// fan ("TP q88 · SL q12") — the headline honest read on every signal row.
+function ClaimPosChip({ claim }) {
+  const br = claim?.bracket_ref;
+  if (br?.tp_q != null && br?.sl_q != null && !Number.isNaN(Number(br.tp_q)) && !Number.isNaN(Number(br.sl_q))) {
+    return (
+      <span
+        className="badge badge-xs badge-secondary font-mono"
+        title="Bracket levels as quantiles of the registered fan (frozen at qualification; scored at resolution). See Signal Context card."
+      >
+        TP {fmtQ(br.tp_q)} · SL {fmtQ(br.sl_q)}
+      </span>
+    );
+  }
+  if (claim) {
+    return (
+      <span
+        className="badge badge-xs badge-ghost font-mono"
+        title="A claim is registered for this signal (see Signal Context card)"
+      >
+        fan
+      </span>
+    );
+  }
+  return null;
+}
+
+function fmtQ(q) {
+  return "q" + Math.round(Number(q) * 100);
 }
 
 function RankChip({ rank }) {
@@ -194,6 +234,7 @@ function FloatingSignalsWidget({ signals }) {
                     <span className={`badge badge-xs ${isSell ? "badge-error" : "badge-success"}`}>{dir}</span>
                     <RankChip rank={rankOf(s)} />
                     <StateBadge state={stateOf(s)} />
+                    <ClaimPosChip claim={claimOfSignal(s)} />
                     {kelly != null && <span className="opacity-60">k{Number(kelly).toFixed(2)}</span>}
                     <span className="opacity-40 ml-auto">{fmtSignalAge(s._epoch, now)}</span>
                   </div>
@@ -3075,7 +3116,6 @@ export default function DashboardPage() {
               setOutcomeBySide(j.outcomeBySide ?? []);
               setVsEqual(j.vsEqual ?? []);
               setVsEqualAligned(j.vsEqualAligned ?? []);
-              setIsLoading(false);
               // Inject new qualified signals into live state so the
               // toast handler fires for any that arrived since the
               // last Realtime event. Dedup by symbol (newest wins).
@@ -3244,7 +3284,13 @@ export default function DashboardPage() {
           onSelect={setSelectedSym}
           renkoBricks={renkoBricks}
           regimeEdge={regimeEdge}
-        /><MarkovSection sweeps={mergedSweeps} selectedSym={selectedSym || resolvedSymbolList[0]} renkoBricks={renkoBricks} />
+        />
+        {/* Claims layer (Phase C): the selected symbol's registered fan +
+            bracket-in-fan positions + claimed probabilities + scored
+            outcome. Reads selectedSweepRow.claim (broadcast or migration-219
+            bundle column); honest empty state when no claim exists. */}
+        <SignalContextCard sweepRow={selectedSweepRow} />
+        <MarkovSection sweeps={mergedSweeps} selectedSym={selectedSym || resolvedSymbolList[0]} renkoBricks={renkoBricks} />
 
         {/* EV / P_win / TimesFM forecast card */}
         <div className="card bg-base-100 shadow border border-base-300 mb-6">

@@ -53,7 +53,7 @@ export const TARGET_META: Record<
     short: "Realized vol",
     unit: "log RV",
     blurb:
-      "T4: H-hour realized volatility from hourly log-returns. The one lane where the weather intuition transfers — vol clusters and has intraday seasonality. Bar to beat: Log-HAR.",
+      "T4: H-hour realized volatility from hourly log-returns. The one lane where the weather intuition transfers — vol clusters and has intraday seasonality. Bars: Log-HAR (the Phase-0 winner) and the GARCH family — GARCH(1,1), GJR-t (TGARCH), EGARCH-t — the proven-methodology challengers.",
   },
   direction: {
     label: "Direction (P(up)) — T5 lane",
@@ -242,6 +242,9 @@ export type ModelId =
   | "svol"
   | "ewma"
   | "har"
+  | "garch"
+  | "gjr"
+  | "egarch"
 
 export interface ModelSpec {
   id: ModelId
@@ -303,6 +306,27 @@ export const MODELS: ModelSpec[] = [
     role: "the vol-lane bar",
     targets: ["vol"],
     desc: "HAR-RV regression on log scale (RV_d, RV_w, RV_m) + residual quantiles. The documented Phase-0 winner — the bar for the vol lane.",
+  },
+  {
+    id: "garch",
+    label: "GARCH(1,1)",
+    role: "the proven-methodology challenger",
+    targets: ["vol"],
+    desc: "MLE GARCH(1,1) with normal innovations on hourly log-returns (Nelder–Mead, frozen at eval start). Multi-step aggregate conditional variance + empirical residual quantiles. The classic conditional-variance incumbent.",
+  },
+  {
+    id: "gjr",
+    label: "GJR-GARCH(1,1)-t",
+    role: "threshold / TGARCH arm",
+    targets: ["vol"],
+    desc: "GJR threshold asymmetry (negative shocks hit variance harder) with Student-t innovations — the 'TGARCH' variant the crypto GARCH-selection literature keeps flagging for BTC. MLE + aggregate-V fan.",
+  },
+  {
+    id: "egarch",
+    label: "EGARCH(1,1)-t",
+    role: "log-variance asymmetric arm",
+    targets: ["vol"],
+    desc: "EGARCH: asymmetry in log-variance space, Student-t innovations — the other variant the BTC/ETH literature prefers. No positivity constraints on parameters, multiplicative volatility dynamics.",
   },
 ]
 

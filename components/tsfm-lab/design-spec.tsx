@@ -351,10 +351,12 @@ export function DesignSpec() {
             </tbody>
           </table>
           <p>
-            Gate per (target, bar): financial price must beat the random walk; vol must beat Log-HAR; direction must beat the coin
-            (Brier &lt; 0.25). Pass requires DM p &lt; 0.05 — a point estimate without significance is reported UNDECIDED, never PASS.
-            Calibration (±5pp of nominal coverage) and covariate use (shuffle Δ-CRPS, §6) gate the verdict separately — a model can be
-            calibrated yet unskilled, and neither excuse passes a deafness test.
+            Gate per (target, bar): financial price must beat the random walk; vol must beat Log-HAR — with the GARCH family
+            (GARCH(1,1)-N, GJR-t, EGARCH-t: MLE, frozen at eval start) measured against the same bar so &quot;should I just use
+            GARCH?&quot; stays a number, not an opinion; direction must beat the coin (Brier &lt; 0.25). Pass requires DM p &lt; 0.05 —
+            a point estimate without significance is reported UNDECIDED, never PASS. Calibration (±5pp of nominal coverage) and
+            covariate use (shuffle Δ-CRPS, §6) gate the verdict separately — a model can be calibrated yet unskilled, and neither
+            excuse passes a deafness test.
           </p>
         </div>
       </details>
