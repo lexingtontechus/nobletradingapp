@@ -4,7 +4,11 @@ import type { SeriesId, Target } from "@/lib/tsfm-lab/design"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
-export const maxDuration = 120
+/* 60 = the Vercel Hobby cap for Serverless Functions. This route is NOT designed
+   to answer a full rolling-origin matrix inside that window — see
+   lib/tsfm-lab/evalOptions.ts, which sub-samples the diagnostic paths so one call
+   stays inside the cap. Do not raise this on Hobby; a value >60 fails the build. */
+export const maxDuration = 60
 
 const SERIES = new Set(["BTCUSD", "USDJPY", "USDCHF", "XAUUSD", "XAGUSD"])
 const TARGETS = new Set(["price", "vol", "direction"])

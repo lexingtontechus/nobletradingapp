@@ -57,6 +57,7 @@ import {
 } from "./eval"
 import { sidecarHealth, timestralQuantiles } from "./sidecar"
 import { EVAL } from "./design"
+import { diagStride, strideOrigins, samplingNote } from "./evalOptions"
 
 const ctxCache = new Map<string, FeatureCtx>()
 const evalCache = new Map<string, EvalResponse>()
@@ -505,6 +506,10 @@ export async function evaluate(
   const { ctx, s } = await ctxFor(series, target)
   const effTarget: Target = target === "direction" ? "price" : target
   const origins = evalOrigins(s, H)
+  /* Diagnostic paths are sub-sampled to fit the 60 s serverless cap; the metric
+     rows and the verdict below still use EVERY origin. */
+  const dStride = diagStride(origins.length)
+  const diagOrigins = strideOrigins(origins, dStride)
   const full = fullCovKeys(s, effTarget)
   const base = BASE_COV_KEYS()
   const armKeys = (m: ModelId) => (m === "tsfm_base" ? base : full)
@@ -530,8 +535,8 @@ export async function evaluate(
       /* PIT histogram from the real model's per-origin quantile vectors */
       const bins = new Array<number>(20).fill(0)
       let pn = 0
-      for (let k = 0; k < origins.length && k < tArm.qvecs.length; k++) {
-        const o = origins[k]
+      for (let k = 0; k < diagOrigins.length && k < tArm.qvecs.length; k++) {
+        const o = diagOrigins[k]
         const q = tArm.qvecs[k]
         let f: number
         if (target === "direction") {
@@ -546,9 +551,9 @@ export async function evaluate(
       }
       pitTimestral = bins.map((b) => b / Math.max(1, pn))
       /* covariate-deafness: "wrong values, right distribution" — subsampled
-         (stride 3, it's a diagnostic) and compared against the full arm
-         restricted to the same origins for a fair delta */
-      const abStride = 3
+         and compared against the full arm restricted to the same origins for a
+         fair delta */
+      const abStride = dStride
       const subLoss =
         tArm.perOriginLoss.length === origins.length
           ? origins
@@ -588,12 +593,14 @@ export async function evaluate(
     string
   >
   const rows = toMetricRows(arms, bar, labels)
-  const pit = pitHistogram(ctx, H, origins, full)
-  const pitBase = pitHistogram(ctx, H, origins, base)
+  const pit = pitHistogram(ctx, H, diagOrigins, full)
+  const pitBase = pitHistogram(ctx, H, diagOrigins, base)
 
   const impKey = cacheKey(series, effTarget, H)
   if (!importanceCache.has(impKey)) {
-    importanceCache.set(impKey, covImportance(ctx, H, origins, full))
+    /* leave-one-covariate-out is the most expensive path here (~16 re-runs);
+       sub-sampled it stays inside the serverless cap. */
+    importanceCache.set(impKey, covImportance(ctx, H, diagOrigins, full))
   }
 
   /* the gate is evaluated on the REAL model when it is live, else the stand-in */
@@ -649,6 +656,7 @@ export async function evaluate(
     timestral,
     verdict,
     n: origins.length,
+    sampling: dStride > 1 ? { stride: dStride, origins: origins.length, note: samplingNote(dStride, origins.length)! } : undefined,
   }
   evalCache.set(key, resp)
   return resp

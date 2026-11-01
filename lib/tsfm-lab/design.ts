@@ -425,4 +425,11 @@ export interface EvalResponse {
     detail: string
   }
   n: number
+  /** Present when the diagnostic paths were sub-sampled to fit the serverless
+   *  time cap. Absent on a full run — do not read a missing note as "sub-sampled". */
+  sampling?: {
+    stride: number
+    origins: number
+    note: string
+  }
 }

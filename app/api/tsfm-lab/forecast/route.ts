@@ -5,7 +5,9 @@ import type { CovKey } from "@/lib/tsfm-lab/models"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
-export const maxDuration = 120
+/* 60 = the Vercel Hobby cap. A single cutoff forecasts one horizon (1 sidecar
+   call for the Timestral arm, or none for the stand-ins) — well inside it. */
+export const maxDuration = 60
 
 const SERIES = new Set(["BTCUSD", "USDJPY", "USDCHF", "XAUUSD", "XAGUSD"])
 const TARGETS = new Set(["price", "vol", "direction"])
