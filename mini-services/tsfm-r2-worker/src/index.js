@@ -34,6 +34,32 @@ export default {
       return new Response("not found", { status: 404 });
     }
 
+    // Authenticated write path (2026-11-18): the trading backend's
+    // tsfm-r2-publish job PUTs the lab CSVs + manifest here (scope:
+    // noble-trader-fastapi-backend/docs/scopes/20261118_TSFM_R2_BACKEND_PUBLISH_SCOPE.md).
+    // Secret-gated, prefix-allowlisted, size-capped. Public GET reads unchanged.
+    if (request.method === "PUT") {
+      const secret = request.headers.get("x-write-secret");
+      if (!env.WRITE_SECRET || secret !== env.WRITE_SECRET) {
+        return new Response("unauthorized", { status: 401 });
+      }
+      const okKey =
+        /^tsfm\/[A-Za-z0-9]+\.csv$/.test(key) || key === "tsfm/manifest.json";
+      if (!okKey) {
+        return new Response("key not allowed", { status: 403 });
+      }
+      const body = await request.arrayBuffer();
+      if (body.byteLength === 0 || body.byteLength > 1048576) {
+        return new Response("body must be 1 byte..1 MB", { status: 413 });
+      }
+      const contentType = key.endsWith(".json") ? "application/json" : "text/csv";
+      await env.BUCKET.put(key, body, { httpMetadata: { contentType } });
+      return Response.json({ ok: true, key, bytes: body.byteLength });
+    }
+    if (request.method !== "GET" && request.method !== "HEAD") {
+      return new Response("method not allowed", { status: 405 });
+    }
+
     const obj = await env.BUCKET.get(key);
     if (!obj) {
       return new Response("not found", { status: 404 });

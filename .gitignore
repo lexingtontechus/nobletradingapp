@@ -32,9 +32,6 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
-# ...but the template is the canonical var list that README/AGENTS.md point at
-# ("cp .env.example .env.local"), so it must be version-controlled.
-!.env.example
 
 # vercel
 .vercel
@@ -50,6 +47,5 @@ __pycache__/
 # supabase cli temp
 supabase/.temp/
 
-# wrangler local mock state — `wrangler r2 object` defaults to --local, so this dir
-# can hold objects that never reached the remote bucket
+# wrangler local state (dev/deploy mock state — never commit)
 .wrangler/
